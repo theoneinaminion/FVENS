@@ -175,6 +175,27 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		petsc_throw(ierr, "KSP set operators");
 	}
 
+	// AB
+
+
+	if 1 {
+		PetscBool  user_defined_pc = PETSC_FALSE; 
+		PC pc;
+		PetscOptionsGetBool(NULL,NULL,"-user_defined_pc",&user_defined_pc,NULL);
+		if (user_defined_pc) 
+		{
+			PCSetType(pc, PCSHELL);
+			MatrixFreePreconditioner mfpc;
+			mfpc.
+
+
+		}
+
+
+	}
+
+
+
 	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
 }
 
