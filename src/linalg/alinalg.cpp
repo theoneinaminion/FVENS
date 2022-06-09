@@ -387,7 +387,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 // AB
 
-if 1{
+if ABFLAG{
 	template <int nvars>
 	MatrixFreePreconditioner::mf_pc_create(MatrixFreePreconditioner **shell){
 	// Set up matrix free PC

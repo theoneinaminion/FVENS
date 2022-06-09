@@ -178,7 +178,7 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 	// AB
 
 
-	if 1 {
+	if ABFLAG {
 		PetscBool  user_defined_pc = PETSC_FALSE; 
 		PC pc;
 		PetscOptionsGetBool(NULL,NULL,"-user_defined_pc",&user_defined_pc,NULL);

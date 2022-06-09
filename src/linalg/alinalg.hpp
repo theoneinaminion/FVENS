@@ -5,7 +5,7 @@
 
 #ifndef ALINALG_H
 #define ALINALG_H
-
+#define ABFLAG 1
 #include "aconstants.hpp"
 #include "mesh/mesh.hpp"
 #include "spatial/aspatial.hpp"
