@@ -185,10 +185,10 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		
 		PetscOptionsGetBool(NULL,NULL,"-user_defined_pc",&user_defined_pc,NULL);
 		if (user_defined_pc) 
-		{
-			ierr = PCSetType(pc, PCSHELL);CHKERRQ(ierr);
-
+		{   
 			MatrixFreePreconditioner<nvars> *mfpc;
+
+			ierr = PCSetType(pc, PCSHELL);CHKERRQ(ierr);
 			ierr = PCShellSetApply(pc,mfpc->mf_pc_apply);CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
 			ierr = PCShellSetDestroy(pc,mfpc->mf_pc_destroy);CHKERRQ(ierr);

@@ -392,7 +392,6 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	// Set up matrix free PC
 	StatusCode ierr = 0;
 	Vec diag;
-
 	MatrixFreePreconditioner *newctx;
 	ierr = PetscNew(&newctx);CHKERRQ(ierr);
 	

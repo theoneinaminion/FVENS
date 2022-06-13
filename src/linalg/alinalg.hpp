@@ -145,7 +145,6 @@ public:
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
 	PetscErrorCode mf_pc_destroy(PC pc);
 
-
 protected:
 	/// Spatial discretization context
 	const Spatial<freal,nvars> *const spatial;
