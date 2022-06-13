@@ -387,10 +387,12 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 // AB
 
-if ABFLAG{
 	template <int nvars>
-	MatrixFreePreconditioner::mf_pc_create(MatrixFreePreconditioner **shell){
+	StatusCode MatrixFreePreconditioner<nvars>::mf_pc_create(MatrixFreePreconditioner **shell){
 	// Set up matrix free PC
+	StatusCode ierr = 0;
+	Vec diag;
+
 	MatrixFreePreconditioner *newctx;
 	ierr = PetscNew(&newctx);CHKERRQ(ierr);
 	
@@ -399,29 +401,35 @@ if ABFLAG{
 	}
 
 	template <int nvars>
-	MatrixFreePreconditioner::mf_pc_setup(PC pc, Mat A, Vec x){
+	StatusCode MatrixFreePreconditioner<nvars>::mf_pc_setup(PC pc, Mat A, Vec x){
 	// Set up matrix free PC
 	Vec diag;
+	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = VecDuplicate(x,&diag);CHKERRQ(ierr);
-	ierr = MatGetDiagonal(pmat,diag);CHKERRQ(ierr);
+	ierr = MatGetDiagonal(A,diag);CHKERRQ(ierr);
 	ierr = VecReciprocal(diag);CHKERRQ(ierr);
 	ierr = shell->diag = diag;CHKERRQ(ierr);
 
 	}
 
 	template <int nvars>
-	MatrixFreePreconditioner::mf_pc_apply(PC pc, Vec x, Vec y){
+	StatusCode MatrixFreePreconditioner<nvars>::mf_pc_apply(PC pc, Vec x, Vec y){
 	// Set up matrix free PC
+	StatusCode ierr = 0;
+	Vec diag;
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = VecPointwiseMult(y,x,shell->diag);CHKERRQ(ierr);
 	}
 
 	template <int nvars>
-	MatrixFreePreconditioner::mf_pc_destroy(PC pc){
+	StatusCode MatrixFreePreconditioner<nvars>::mf_pc_destroy(PC pc){
 	// Set up matrix free PC
+	StatusCode ierr = 0;
+	Vec diag;
+
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = VecDestroy(&shell->diag);CHKERRQ(ierr);

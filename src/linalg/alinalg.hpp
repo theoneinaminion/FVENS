@@ -5,7 +5,7 @@
 
 #ifndef ALINALG_H
 #define ALINALG_H
-#define ABFLAG 1
+#define ABFLAG (1)
 #include "aconstants.hpp"
 #include "mesh/mesh.hpp"
 #include "spatial/aspatial.hpp"
@@ -119,7 +119,9 @@ StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,nvars> *const start
 #endif
 
 // AB
-StatusCode create_matrixfree_pc(const Spatial<freal,nvars> *const s, Mat *const A);
+
+// template<int nvars>
+// PetscErrorCode create_mf_pc(const Spatial<freal,nvars> *const s, Mat *const A);
 
 
 template <int nvars>
@@ -138,10 +140,11 @@ public:
 	/** Note that the residual vector supplied is assumed to be the negative of what is needed,
 	 * exactly what Spatial::compute_residual gives.
 	 */
-	int set_state(const Vec u_state, const Vec r_state, const Vec mdts);
+	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell);
+	PetscErrorCode mf_pc_setup(PC pc, Mat A, Vec x);
+	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
+	PetscErrorCode mf_pc_destroy(PC pc);
 
-	/// Compute a Jacobian-vector product
-	StatusCode apply(const Vec x, Vec y) const;
 
 protected:
 	/// Spatial discretization context
@@ -159,12 +162,6 @@ protected:
 	/// Time steps for each cell
 	Vec mdt;
 };
-
-
-
-
-
-
 
 
 }
