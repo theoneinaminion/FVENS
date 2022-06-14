@@ -124,7 +124,7 @@ StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,nvars> *const start
 // PetscErrorCode create_mf_pc(const Spatial<freal,nvars> *const s, Mat *const A);
 
 
-template <int nvars>
+// template <int nvars>
 class MatrixFreePreconditioner
 {
 public:
@@ -133,33 +133,33 @@ public:
 	 * \param[in] spatial_discretization The spatial discretization of which this objact
 	 *   will act as Jacobian
 	 */
-	MatrixFreePreconditioner(const Spatial<freal,nvars> *const spatial_discretization);
+	// MatrixFreePreconditioner(const Spatial<freal,nvars> *const spatial_discretization);
 
 	/// Set the state u at which the Jacobian is computed, the corresponding residual r(u) and 
 	/// the diagonal vector of the mass matrix for each cell
 	/** Note that the residual vector supplied is assumed to be the negative of what is needed,
 	 * exactly what Spatial::compute_residual gives.
 	 */
-	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell);
+	PetscErrorCode mf_pc_create(MatrixFreePreconditioner shell);
 	PetscErrorCode mf_pc_setup(PC pc, Mat A, Vec x);
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
 	PetscErrorCode mf_pc_destroy(PC pc);
 
-protected:
+//protected:
 	/// Spatial discretization context
-	const Spatial<freal,nvars> *const spatial;
+	//const Spatial<freal,nvars> *const spatial;
 
 	/// step length for finite difference Jacobian
-	freal eps;
+	//freal eps;
 
-	/// The state at which to compute the Jacobian
-	Vec u;
+	/// Diagonal for Jacobi
+	Vec diag;
 
 	/// The residual of the state \ref uvec at which to compute the Jacobian
-	Vec res;
+	//Vec res;
 
 	/// Time steps for each cell
-	Vec mdt;
+	//Vec mdt;
 };
 
 

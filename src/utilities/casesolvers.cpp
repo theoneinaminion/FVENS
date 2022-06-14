@@ -180,13 +180,13 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 	if ABFLAG {
 		StatusCode ierr = 0;
 		PC pc;
-		KSPGetPC(&solver.ksp,&pc);
+		KSPGetPC(solver.ksp,&pc);
 		PetscBool  user_defined_pc = PETSC_FALSE; 
 		
 		PetscOptionsGetBool(NULL,NULL,"-user_defined_pc",&user_defined_pc,NULL);
 		if (user_defined_pc) 
 		{   
-			MatrixFreePreconditioner<nvars> *mfpc;
+			MatrixFreePreconditioner *mfpc;
 
 			ierr = PCSetType(pc, PCSHELL);CHKERRQ(ierr);
 			ierr = PCShellSetApply(pc,mfpc->mf_pc_apply);CHKERRQ(ierr);

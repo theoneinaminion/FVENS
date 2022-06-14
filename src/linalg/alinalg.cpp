@@ -387,51 +387,57 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 // AB
 
-	template <int nvars>
-	StatusCode MatrixFreePreconditioner<nvars>::mf_pc_create(MatrixFreePreconditioner **shell){
+	//template <int nvars>
+	StatusCode MatrixFreePreconditioner::mf_pc_create(MatrixFreePreconditioner shell){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
-	Vec diag;
+	// Vec diag;
 	MatrixFreePreconditioner *newctx;
 	ierr = PetscNew(&newctx);CHKERRQ(ierr);
-	
-	ierr = shell->diag = diag;CHKERRQ(ierr);
-
+	newctx->diag = 0;
+	shell = *newctx;
+	return 0;
 	}
+	
 
-	template <int nvars>
-	StatusCode MatrixFreePreconditioner<nvars>::mf_pc_setup(PC pc, Mat A, Vec x){
+	// template <int nvars>
+	StatusCode MatrixFreePreconditioner::mf_pc_setup(PC pc, Mat A, Vec x){
 	// Set up matrix free PC
-	Vec diag;
+	// Vec diag;
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = VecDuplicate(x,&diag);CHKERRQ(ierr);
 	ierr = MatGetDiagonal(A,diag);CHKERRQ(ierr);
 	ierr = VecReciprocal(diag);CHKERRQ(ierr);
-	ierr = shell->diag = diag;CHKERRQ(ierr);
+	shell->diag = diag;
+	return 0;
 
 	}
 
-	template <int nvars>
-	StatusCode MatrixFreePreconditioner<nvars>::mf_pc_apply(PC pc, Vec x, Vec y){
+	//template <int nvars>
+	StatusCode MatrixFreePreconditioner::mf_pc_apply(PC pc, Vec x, Vec y){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
-	Vec diag;
+	// Vec diag;
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = VecPointwiseMult(y,x,shell->diag);CHKERRQ(ierr);
+		return 0;
+
 	}
 
-	template <int nvars>
-	StatusCode MatrixFreePreconditioner<nvars>::mf_pc_destroy(PC pc){
+	//template <int nvars>
+	StatusCode MatrixFreePreconditioner::mf_pc_destroy(PC pc){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
-	Vec diag;
+	// Vec diag;
 
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = VecDestroy(&shell->diag);CHKERRQ(ierr);
 	ierr = PetscFree(shell);CHKERRQ(ierr);
+		return 0;
+
 	}
 }
