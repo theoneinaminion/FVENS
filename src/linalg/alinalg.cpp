@@ -423,7 +423,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = VecPointwiseMult(y,x,shell->diag);CHKERRQ(ierr);
-		return 0;
+	return 0;
 
 	}
 
@@ -437,7 +437,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = VecDestroy(&shell->diag);CHKERRQ(ierr);
 	ierr = PetscFree(shell);CHKERRQ(ierr);
-		return 0;
+	return 0;
 
 	}
 }
