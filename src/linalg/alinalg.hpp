@@ -140,10 +140,10 @@ public:
 	/** Note that the residual vector supplied is assumed to be the negative of what is needed,
 	 * exactly what Spatial::compute_residual gives.
 	 */
-	PetscErrorCode mf_pc_create(MatrixFreePreconditioner shell);
-	PetscErrorCode mf_pc_setup(PC pc, Mat A, Vec x);
-	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
-	PetscErrorCode mf_pc_destroy(PC pc);
+	// PetscErrorCode mf_pc_create(MatrixFreePreconditioner shell);
+	// PetscErrorCode mf_pc_setup(PC pc, Mat A, Vec x);
+	// PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
+	// PetscErrorCode mf_pc_destroy(PC pc);
 
 //protected:
 	/// Spatial discretization context
@@ -162,6 +162,10 @@ public:
 	//Vec mdt;
 };
 
+	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell);
+	PetscErrorCode mf_pc_setup(PC pc, Mat A, Vec x);
+	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
+	PetscErrorCode mf_pc_destroy(PC pc);
 
 }
 #endif

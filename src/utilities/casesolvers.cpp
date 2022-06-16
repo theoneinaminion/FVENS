@@ -180,6 +180,8 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 	if ABFLAG {
 		StatusCode ierr = 0;
 		PC pc;
+		Vec diag1;
+		ierr = MatGetDiagonal(solver.A,diag1);CHKERRQ(ierr);
 		KSPGetPC(solver.ksp,&pc);
 		PetscBool  user_defined_pc = PETSC_FALSE; 
 		
@@ -189,10 +191,12 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 			MatrixFreePreconditioner *mfpc;
 
 			ierr = PCSetType(pc, PCSHELL);CHKERRQ(ierr);
-			ierr = PCShellSetApply(pc,mfpc->mf_pc_apply);CHKERRQ(ierr);
+			ierr = PetscCall(mf_pc_create(&mfpc));
+			ierr = PCShellSetApply(pc,&(mf_pc_apply));CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
-			ierr = PCShellSetDestroy(pc,mfpc->mf_pc_destroy);CHKERRQ(ierr);
+			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy));CHKERRQ(ierr);
 			ierr = PCShellSetName(pc,"MyPreconditioner");CHKERRQ(ierr);
+			ierr = PetscCall(mf_pc_setup(pc,solver.A,diag1));
 
 		}
 
