@@ -150,7 +150,7 @@ protected:
 	static LinearProblemLHS setupImplicitSolver(const Spatial<freal,NVARS> *const s, const bool use_mfjac);
 
 	/// Sets up only the KSP context, assuming the Mats have been set up
-	static void setupKSP(LinearProblemLHS& solver, const bool use_matrix_free);
+	static int setupKSP(LinearProblemLHS& solver, const bool use_matrix_free);
 };
 
 /// Solution procedure for a steady-state case

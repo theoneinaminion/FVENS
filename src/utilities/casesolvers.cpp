@@ -13,6 +13,7 @@
 #include "utilities/aoptionparser.hpp"
 #include "spatial/aoutput.hpp"
 #include "mesh/ameshutils.hpp"
+#include "mesh/mesh.hpp"
 #include "mpiutils.hpp"
 
 #ifdef USE_BLASTED
@@ -163,7 +164,7 @@ FlowSolutionFunctionals FlowCase::run_output(const bool surface_file_needed,
 			std::get<0>(fnls), std::get<1>(fnls), std::get<2>(fnls)};
 }
 
-void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
+int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 	// initialize solver
 	int ierr = KSPCreate(PETSC_COMM_WORLD, &solver.ksp); petsc_throw(ierr, "KSP Create");
 	if(use_mfjac) {
@@ -181,6 +182,13 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		StatusCode ierr = 0;
 		PC pc;
 		Vec diag1;
+		PetscInt m,n;
+		MatGetSize(solver.A,&m,&n);
+		VecCreate(PETSC_COMM_WORLD,&diag1);
+		VecSetSizes(diag1,PETSC_DECIDE,m);
+		// const UMesh<freal,NDIM> *const m = space->mesh();
+		// ierr = createSystemVector(m, nvars, &diag1);
+
 		ierr = MatGetDiagonal(solver.A,diag1);CHKERRQ(ierr);
 		KSPGetPC(solver.ksp,&pc);
 		PetscBool  user_defined_pc = PETSC_FALSE; 
@@ -190,13 +198,13 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		{   
 			MatrixFreePreconditioner *mfpc;
 
-			ierr = PCSetType(pc, PCSHELL);CHKERRQ(ierr);
-			ierr = PetscCall(mf_pc_create(&mfpc));
-			ierr = PCShellSetApply(pc,&(mf_pc_apply));CHKERRQ(ierr);
-			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
-			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy));CHKERRQ(ierr);
-			ierr = PCShellSetName(pc,"MyPreconditioner");CHKERRQ(ierr);
-			ierr = PetscCall(mf_pc_setup(pc,solver.A,diag1));
+			PCSetType(pc, PCSHELL);
+			mf_pc_create(&mfpc);
+			PCShellSetApply(pc,&(mf_pc_apply));
+			PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
+			PCShellSetDestroy(pc,&(mf_pc_destroy));
+			PCShellSetName(pc,"MyPreconditioner");
+			mf_pc_setup(pc,solver.A,diag1);
 
 		}
 
@@ -206,6 +214,7 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 
 
 	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
+	return 0;
 }
 
 FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVARS> *const space,
