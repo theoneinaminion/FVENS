@@ -1,7 +1,7 @@
 *.swp
 *.directory
 *~
-
+doc/**
 build/** 
 
 *.vtu
@@ -15,3 +15,7 @@ build/**
 
 TAGS
 tags
+.vscode/c_cpp_properties.json
+.gitignore
+.vscode/settings.json
+.vscode/FVENS.code-workspace
