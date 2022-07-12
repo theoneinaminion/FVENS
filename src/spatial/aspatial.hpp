@@ -46,7 +46,7 @@ public:
 
 	virtual ~Spatial();
 
-	/// Computes the residual and local time steps
+	/// Computes the residual and local time steps 
 	/** By convention, we need to compute the negative of the nonlinear function whose root
 	 * we want to find. Note that our nonlinear function or residual is defined (for steady problems) as
 	 * the sum (over all cells) of net outgoing fluxes from each cell
