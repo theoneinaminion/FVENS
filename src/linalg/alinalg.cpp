@@ -421,9 +421,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
-	MatrixFreePreconditioner *shell;
-	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
-	ierr = VecPointwiseMult(y,x,shell->diag);CHKERRQ(ierr);
+	mf_lusgs(x,y);
 	return 0;
 
 	}
@@ -442,4 +440,114 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	return 0;
 
 	}
+
+	PetscErrorCode mf_lusgs(Vec x, Vec y){
+
+		// Execute LU-SGS preconditioning in a matrix-free fashion (serial)
+
+		
+
+
+	}
+
+	
+
+}
+
+
+
+
+
+
+
+get_diagblk_inv(const Vec uvec, Mat A, Mat C) const
+
+{
+	
+	// C is the block matrix containing the inverse of all diagonal blocks.
+	using Eigen::Matrix; using Eigen::RowMajor;
+
+	StatusCode ierr = 0;
+
+	// Get comm to know if this is a serial or parallel assembly
+	// MPI_Comm mycomm;
+	//ierr = PetscObjectGetComm((PetscObject)A, &mycomm); CHKERRQ(ierr);
+	//const int mpisize = get_mpi_size(mycomm);
+	//const bool isdistributed = (mpisize > 1);
+
+	PetscInt locnelem;
+	ierr = VecGetLocalSize(uvec, &locnelem); CHKERRQ(ierr);
+	assert(locnelem % nvars == 0);
+	locnelem /= nvars;
+	assert(locnelem == m->gnelem());
+
+	ConstGhostedVecHandler<PetscScalar> uvh(uvec);
+	const PetscScalar *const uarr = uvh.getArray();
+
+//#pragma omp parallel for default(shared)
+	for(fint iface = m->gPhyBFaceStart(); iface < m->gPhyBFaceEnd(); iface++)
+	{
+		const fint lelem = m->gintfac(iface,0);
+		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
+
+		Matrix<freal,nvars,nvars,RowMajor> left;
+		compute_local_jacobian_boundary(iface, &uarr[lelem*nvars], left);
+
+		// negative L and U contribute to diagonal blocks
+		left *= -1.0;
+//#pragma omp critical
+		//{
+			ierr = MatSetValuesBlocked(A, 1,&lelemg, 1,&lelemg, left.data(), ADD_VALUES);
+		//}
+	}
+
+//#pragma omp parallel for default(shared)
+	for(fint iface = m->gSubDomFaceStart(); iface < m->gSubDomFaceEnd(); iface++)
+	{
+		const fint lelem = m->gintfac(iface,0);
+		const fint relem = m->gintfac(iface,1);
+		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
+		const fint relemg = isdistributed ? m->gglobalElemIndex(relem) : relem;
+
+		Matrix<freal,nvars,nvars,RowMajor> L;
+		Matrix<freal,nvars,nvars,RowMajor> U;
+		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
+
+		// negative L and U contribute to diagonal blocks
+		L *= -1.0; U *= -1.0;
+//#pragma omp critical
+		//{
+			ierr = MatSetValuesBlocked(A, 1, &lelemg, 1, &lelemg, L.data(), ADD_VALUES);
+		//}
+//#pragma omp critical
+		//{
+			ierr = MatSetValuesBlocked(A, 1, &relemg, 1, &relemg, U.data(), ADD_VALUES);
+		//}
+	}
+
+//#pragma omp parallel for default(shared)
+	for(fint iface = m->gConnBFaceStart(); iface < m->gConnBFaceEnd(); iface++)
+	{
+		const fint lelem = m->gintfac(iface,0);
+		const fint relem = m->gintfac(iface,1);
+		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
+		const fint relemg = isdistributed ? m->gconnface(iface-m->gConnBFaceStart(), 3) : -1;
+
+		Matrix<freal,nvars,nvars,RowMajor> L;
+		Matrix<freal,nvars,nvars,RowMajor> U;
+		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
+
+
+		// negative L and U contribute to diagonal blocks
+		L *= -1.0;
+//#pragma omp critical
+		//{
+			ierr = MatSetValuesBlocked(A, 1, &lelemg, 1, &lelemg, L.data(), ADD_VALUES);
+		//}
+	}
+
+
+	MatInvertBlockDiagonalMat(A,C); // inverting the block diagonals of matrix A
+
+	return ierr;
 }

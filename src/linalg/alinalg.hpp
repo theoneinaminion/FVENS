@@ -73,6 +73,11 @@ public:
 	/// Compute a Jacobian-vector product
 	StatusCode apply(const Vec x, Vec y) const;
 
+	// AB
+	//Apply only upper and lower blocks as matrix-vector products needed for LU-SGS
+	StatusCode L_apply(const Vec x, Vec y) const;
+	StatusCode U_apply(const Vec x, Vec y) const;
+
 protected:
 	/// Spatial discretization context
 	const Spatial<freal,nvars> *const spatial;
@@ -152,8 +157,9 @@ public:
 	/// step length for finite difference Jacobian
 	//freal eps;
 
-	/// Diagonal for Jacobi
-	Vec diag;
+	Vec d;
+	Vec e;
+	
 
 	/// The residual of the state \ref uvec at which to compute the Jacobian
 	//Vec res;
@@ -166,6 +172,11 @@ public:
 	PetscErrorCode mf_pc_setup(PC pc, Mat A, Vec x);
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
 	PetscErrorCode mf_pc_destroy(PC pc);
+	PetscErrorCode mf_lusgs(Vec x, Vec y);
+	StatusCode get_diagblk_inv (const Vec uvec, Mat A);
+
+
+
 
 }
 #endif
