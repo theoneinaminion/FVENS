@@ -178,9 +178,13 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 
 	// AB
 
+	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
+
 	if ABFLAG {
 		StatusCode ierr = 0;
 		PC pc;
+
+		/*
 		Vec diag1;
 		PetscInt m,n;
 		MatGetSize(solver.A,&m,&n);
@@ -188,8 +192,10 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		VecSetSizes(diag1,PETSC_DECIDE,m);
 		// const UMesh<freal,NDIM> *const m = space->mesh();
 		// ierr = createSystemVector(m, nvars, &diag1);
-
+		
 		ierr = MatGetDiagonal(solver.A,diag1);CHKERRQ(ierr);
+		*/
+
 		KSPGetPC(solver.ksp,&pc);
 		PetscBool  user_defined_pc = PETSC_FALSE; 
 		
@@ -203,17 +209,14 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 			PCShellSetApply(pc,&(mf_pc_apply));
 			PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
 			PCShellSetDestroy(pc,&(mf_pc_destroy));
-			PCShellSetName(pc,"MyPreconditioner");
-			mf_pc_setup(pc,solver.A,diag1);
+			PCShellSetName(pc,"LUSGS matrix-occupied");
+			mf_pc_setup(pc,solver.A);
 
 		}
 
 
 	}
-
-
-
-	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
+	
 	return 0;
 }
 

@@ -31,6 +31,10 @@
 
 #include "mesh/mesh.hpp"
 
+// AB
+#include "linalg/alinalg.hpp"
+// AB end
+
 namespace fvens {
 
 /// Base class for finite volume spatial discretization

@@ -278,6 +278,13 @@ StatusCode Spatial<scalar,nvars>::assemble_jacobian(const Vec uvec, Mat A) const
 		}
 	}
 
+	// AB begin
+	MatrixFreePreconditioner mfp;
+	MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&mfp.Lmat);
+	MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&mfp.Umat);
+
+	// AB end
+
 #pragma omp parallel for default(shared)
 	for(fint iface = m->gSubDomFaceStart(); iface < m->gSubDomFaceEnd(); iface++)
 	{
@@ -293,10 +300,16 @@ StatusCode Spatial<scalar,nvars>::assemble_jacobian(const Vec uvec, Mat A) const
 #pragma omp critical
 		{
 			ierr = MatSetValuesBlocked(A, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
+			// AB begin
+			ierr = MatSetValuesBlocked(mfp.Lmat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
+			// AB end
 		}
 #pragma omp critical
 		{
 			ierr = MatSetValuesBlocked(A, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
+			// AB begin
+			ierr = MatSetValuesBlocked(mfp.Umat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
+			// AB end
 		}
 
 		// negative L and U contribute to diagonal blocks
@@ -326,6 +339,10 @@ StatusCode Spatial<scalar,nvars>::assemble_jacobian(const Vec uvec, Mat A) const
 #pragma omp critical
 		{
 			ierr = MatSetValuesBlocked(A, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
+
+			// AB begin
+			ierr = MatSetValuesBlocked(mfp.Umat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
+			// AB end
 		}
 
 		// negative L and U contribute to diagonal blocks

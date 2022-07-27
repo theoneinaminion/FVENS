@@ -387,6 +387,76 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 // AB
 
+
+	StatusCode MatrixFreePreconditioner::get_LU_blockmat(const Vec uvec, Mat Lmat, Mat Umat){
+
+
+		using Eigen::Matrix; using Eigen::RowMajor;
+
+	StatusCode ierr = 0;
+
+	// Get comm to know if this is a serial or parallel assembly
+	MPI_Comm mycomm;
+	ierr = PetscObjectGetComm((PetscObject)A, &mycomm); CHKERRQ(ierr);
+	const int mpisize = get_mpi_size(mycomm);
+	const bool isdistributed = (mpisize > 1);
+
+	PetscInt locnelem;
+	ierr = VecGetLocalSize(uvec, &locnelem); CHKERRQ(ierr);
+	assert(locnelem % nvars == 0);
+	locnelem /= nvars;
+	assert(locnelem == m->gnelem());
+
+	ConstGhostedVecHandler<PetscScalar> uvh(uvec);
+	const PetscScalar *const uarr = uvh.getArray();
+
+#pragma omp parallel for default(shared)
+	for(fint iface = m->gSubDomFaceStart(); iface < m->gSubDomFaceEnd(); iface++)
+	{
+		const fint lelem = m->gintfac(iface,0);
+		const fint relem = m->gintfac(iface,1);
+		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
+		const fint relemg = isdistributed ? m->gglobalElemIndex(relem) : relem;
+
+		Matrix<freal,nvars,nvars,RowMajor> L;
+		Matrix<freal,nvars,nvars,RowMajor> U;
+		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
+
+#pragma omp critical
+		{
+			ierr = MatSetValuesBlocked(Lmat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
+		}
+#pragma omp critical
+		{
+			ierr = MatSetValuesBlocked(Umat, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
+		}
+
+		
+
+#pragma omp parallel for default(shared)
+	for(fint iface = m->gConnBFaceStart(); iface < m->gConnBFaceEnd(); iface++)
+	{
+		const fint lelem = m->gintfac(iface,0);
+		const fint relem = m->gintfac(iface,1);
+		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
+		const fint relemg = isdistributed ? m->gconnface(iface-m->gConnBFaceStart(), 3) : -1;
+
+		Matrix<freal,nvars,nvars,RowMajor> L;
+		Matrix<freal,nvars,nvars,RowMajor> U;
+		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
+
+#pragma omp critical
+		{
+			ierr = MatSetValuesBlocked(Umat, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
+		}
+
+		
+	}
+
+	return ierr;
+
+	}
+
 	//template <int nvars>
 	//StatusCode MatrixFreePreconditioner::
 	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell){
@@ -394,7 +464,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *newctx;
 	ierr = PetscNew(&newctx);CHKERRQ(ierr);
-	newctx->diag = 0;
+	// newctx->diag = 0;
 	*shell = newctx;
 	return 0;
 	}
@@ -402,16 +472,13 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 	// template <int nvars>
 	// StatusCode MatrixFreePreconditioner::
-	PetscErrorCode mf_pc_setup(PC pc, Mat A, Vec x){
+	PetscErrorCode mf_pc_setup(PC pc, Mat A){
 	// Set up matrix free PC
-	Vec diag;
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
-	ierr = VecDuplicate(x,&diag);CHKERRQ(ierr);
-	ierr = MatGetDiagonal(A,diag);CHKERRQ(ierr);
-	ierr = VecReciprocal(diag);CHKERRQ(ierr);
-	shell->diag = diag;
+	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv));;CHKERRQ(ierr);
+	ierr = MatInvertBlockDiagonalMat(A,&(shell->Dinv)); CHKERRQ(ierr);
 	return 0;
 
 	}
@@ -421,7 +488,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
-	mf_lusgs(x,y);
+	mc_lusgs(x,y);
 	return 0;
 
 	}
@@ -435,7 +502,9 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
-	ierr = VecDestroy(&shell->diag);CHKERRQ(ierr);
+	ierr = MatDestroy(&shell->Lmat);CHKERRQ(ierr);
+	ierr = MatDestroy(&shell->Umat);CHKERRQ(ierr);
+	ierr = MatDestroy(&shell->Dinv);CHKERRQ(ierr);
 	ierr = PetscFree(shell);CHKERRQ(ierr);
 	return 0;
 
@@ -457,97 +526,79 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 
 
+PetscErrorCode mc_lusgs(Vec x, Vec y){
+
+	//Matrix A to apply LU-SGS in matrix format. 
+
+	// Get the blocks of the matrix (D, L, U)
 
 
+	Vec y1;
+	Vec y2;
+	VecDuplicate(x,&y1);
+	VecDuplicate(x,&y2);
 
-get_diagblk_inv(const Vec uvec, Mat A, Mat C) const
+	VecSet(y,0);
+	VecSet(y1,0);
+	VecSet(y2,0);
 
-{
+	MatrixFreePreconditioner mfp;
+
+	PetscReal tol = 1e-3;
+
+	while (tol>1e-3)
+	{
+		Vec temp;
+		VecDuplicate(x,&temp);
+
+		// y1 = Dinv(x-Lmat*y1);
+		MatMult(mfp.Lmat,y1,temp);
+		VecAXPY(temp,-1,x);
+		MatMult(mfp.Dinv,temp,y1);
+
+		//y = y1 - Dinv * Umat * y
+		MatMult(mfp.Lmat,y,temp);
+		MatMult(mfp.Dinv,temp,y);
+		VecAXPY(y,-1,y1);
+
+		// Residual to compute tolerance
+		VecAXPY(y,-1,y2);
+		VecNorm(y,NORM_2,&tol);
+		
+		//Storing the old vectors
+		VecCopy(y,y2);
+
+
+	}
 	
-	// C is the block matrix containing the inverse of all diagonal blocks.
-	using Eigen::Matrix; using Eigen::RowMajor;
-
-	StatusCode ierr = 0;
-
-	// Get comm to know if this is a serial or parallel assembly
-	// MPI_Comm mycomm;
-	//ierr = PetscObjectGetComm((PetscObject)A, &mycomm); CHKERRQ(ierr);
-	//const int mpisize = get_mpi_size(mycomm);
-	//const bool isdistributed = (mpisize > 1);
-
-	PetscInt locnelem;
-	ierr = VecGetLocalSize(uvec, &locnelem); CHKERRQ(ierr);
-	assert(locnelem % nvars == 0);
-	locnelem /= nvars;
-	assert(locnelem == m->gnelem());
-
-	ConstGhostedVecHandler<PetscScalar> uvh(uvec);
-	const PetscScalar *const uarr = uvh.getArray();
-
-//#pragma omp parallel for default(shared)
-	for(fint iface = m->gPhyBFaceStart(); iface < m->gPhyBFaceEnd(); iface++)
-	{
-		const fint lelem = m->gintfac(iface,0);
-		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
-
-		Matrix<freal,nvars,nvars,RowMajor> left;
-		compute_local_jacobian_boundary(iface, &uarr[lelem*nvars], left);
-
-		// negative L and U contribute to diagonal blocks
-		left *= -1.0;
-//#pragma omp critical
-		//{
-			ierr = MatSetValuesBlocked(A, 1,&lelemg, 1,&lelemg, left.data(), ADD_VALUES);
-		//}
-	}
-
-//#pragma omp parallel for default(shared)
-	for(fint iface = m->gSubDomFaceStart(); iface < m->gSubDomFaceEnd(); iface++)
-	{
-		const fint lelem = m->gintfac(iface,0);
-		const fint relem = m->gintfac(iface,1);
-		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
-		const fint relemg = isdistributed ? m->gglobalElemIndex(relem) : relem;
-
-		Matrix<freal,nvars,nvars,RowMajor> L;
-		Matrix<freal,nvars,nvars,RowMajor> U;
-		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
-
-		// negative L and U contribute to diagonal blocks
-		L *= -1.0; U *= -1.0;
-//#pragma omp critical
-		//{
-			ierr = MatSetValuesBlocked(A, 1, &lelemg, 1, &lelemg, L.data(), ADD_VALUES);
-		//}
-//#pragma omp critical
-		//{
-			ierr = MatSetValuesBlocked(A, 1, &relemg, 1, &relemg, U.data(), ADD_VALUES);
-		//}
-	}
-
-//#pragma omp parallel for default(shared)
-	for(fint iface = m->gConnBFaceStart(); iface < m->gConnBFaceEnd(); iface++)
-	{
-		const fint lelem = m->gintfac(iface,0);
-		const fint relem = m->gintfac(iface,1);
-		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
-		const fint relemg = isdistributed ? m->gconnface(iface-m->gConnBFaceStart(), 3) : -1;
-
-		Matrix<freal,nvars,nvars,RowMajor> L;
-		Matrix<freal,nvars,nvars,RowMajor> U;
-		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
-
-
-		// negative L and U contribute to diagonal blocks
-		L *= -1.0;
-//#pragma omp critical
-		//{
-			ierr = MatSetValuesBlocked(A, 1, &lelemg, 1, &lelemg, L.data(), ADD_VALUES);
-		//}
-	}
-
-
-	MatInvertBlockDiagonalMat(A,C); // inverting the block diagonals of matrix A
-
-	return ierr;
 }
+
+
+
+
+	/*
+	Vec d; //diagonal entries of the matrix
+	PetscInt m,n;
+	VecDuplicate(x,&yst);
+	VecDuplicate(x,&d);
+
+
+	MatGetDiagonal(A, d);
+	MatGetSize(A,&m,&n);
+	VecReciprocal(d);
+
+	//
+	 Mat Dinv; // Matrix with inverse diagonal blocks of A
+	//MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&Dinv);
+	//MatInvertBlockDiagonalMat(A,&Dinv);
+
+	int nblock = n/NVARS; 
+
+	for (int i = 0;i<nblock;i++){
+
+
+
+	} */
+
+
+
