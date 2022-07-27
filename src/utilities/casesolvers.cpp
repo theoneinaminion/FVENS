@@ -205,6 +205,8 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		{   
 			MatrixFreePreconditioner *mfpc;
 			PetscViewer viewer;
+			PetscCall(PetscViewerCreate(PETSC_COMM_WORLD,&viewer));
+  			PetscCall(PetscViewerSetType(viewer,PETSCVIEWERBINARY));
 
 			PCSetType(pc, PCSHELL);
 			mf_pc_create(&mfpc);
@@ -214,8 +216,7 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 			PCShellSetName(pc,"LUSGS matrix-occupied");
 			mf_pc_setup(pc,solver.A);
 			PetscCall(PCView(pc,viewer));
-			PCShellSetName(pc,"MyPreconditioner");
-			mf_pc_setup(pc,solver.A,diag1);
+			mf_pc_setup(pc,solver.A);
 
 		}
 

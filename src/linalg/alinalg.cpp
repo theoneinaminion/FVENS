@@ -477,7 +477,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
-	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,shell->Dinv);;CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv));CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 	return 0;
 
