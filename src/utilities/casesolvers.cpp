@@ -193,6 +193,7 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		// const UMesh<freal,NDIM> *const m = space->mesh();
 		// ierr = createSystemVector(m, nvars, &diag1);
 		
+
 		ierr = MatGetDiagonal(solver.A,diag1);CHKERRQ(ierr);
 		*/
 
@@ -204,6 +205,7 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		{   
 			MatrixFreePreconditioner *mfpc;
 			PetscViewer viewer;
+
 			PCSetType(pc, PCSHELL);
 			mf_pc_create(&mfpc);
 			PCShellSetApply(pc,&(mf_pc_apply));
@@ -212,12 +214,18 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 			PCShellSetName(pc,"LUSGS matrix-occupied");
 			mf_pc_setup(pc,solver.A);
 			PetscCall(PCView(pc,viewer));
+			PCShellSetName(pc,"MyPreconditioner");
+			mf_pc_setup(pc,solver.A,diag1);
 
 		}
 
 
 	}
 	
+
+
+
+	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
 	return 0;
 }
 
