@@ -32,7 +32,7 @@
 #include "mesh/mesh.hpp"
 
 // AB
-#include "linalg/alinalg.hpp"
+//#include "linalg/alinalg.hpp"
 // AB end
 
 namespace fvens {

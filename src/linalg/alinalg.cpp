@@ -387,7 +387,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 // AB
 
-
+/*
 	StatusCode MatrixFreePreconditioner::get_LU_blockmat(const Vec uvec, Mat Lmat, Mat Umat){
 
 
@@ -455,7 +455,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 	return ierr;
 
-	}
+	} */
 
 	//template <int nvars>
 	//StatusCode MatrixFreePreconditioner::
@@ -477,8 +477,8 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
-	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv));;CHKERRQ(ierr);
-	ierr = MatInvertBlockDiagonalMat(A,&(shell->Dinv)); CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,shell->Dinv);;CHKERRQ(ierr);
+	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 	return 0;
 
 	}
@@ -487,7 +487,6 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	//StatusCode MatrixFreePreconditioner::
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y){
 	// Set up matrix free PC
-	StatusCode ierr = 0;
 	mc_lusgs(x,y);
 	return 0;
 
@@ -510,16 +509,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 	}
 
-	PetscErrorCode mf_lusgs(Vec x, Vec y){
 
-		// Execute LU-SGS preconditioning in a matrix-free fashion (serial)
-
-		
-
-
-	}
-
-	
 
 }
 
@@ -570,6 +560,8 @@ PetscErrorCode mc_lusgs(Vec x, Vec y){
 
 
 	}
+
+	return 0;
 	
 }
 

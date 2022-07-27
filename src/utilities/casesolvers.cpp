@@ -197,13 +197,13 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		*/
 
 		KSPGetPC(solver.ksp,&pc);
-		PetscBool  user_defined_pc = PETSC_FALSE; 
+		PetscBool  user_defined_pc = PETSC_TRUE; 
 		
 		PetscOptionsGetBool(NULL,NULL,"-user_defined_pc",&user_defined_pc,NULL);
 		if (user_defined_pc) 
 		{   
 			MatrixFreePreconditioner *mfpc;
-
+			PetscViewer viewer;
 			PCSetType(pc, PCSHELL);
 			mf_pc_create(&mfpc);
 			PCShellSetApply(pc,&(mf_pc_apply));
@@ -211,6 +211,7 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 			PCShellSetDestroy(pc,&(mf_pc_destroy));
 			PCShellSetName(pc,"LUSGS matrix-occupied");
 			mf_pc_setup(pc,solver.A);
+			PetscCall(PCView(pc,viewer));
 
 		}
 

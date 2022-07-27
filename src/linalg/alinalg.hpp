@@ -172,12 +172,12 @@ public:
 };
 
 	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell);
-	PetscErrorCode mf_pc_setup(PC pc, Mat A, Vec x);
+	PetscErrorCode mf_pc_setup(PC pc, Mat A);
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
 	PetscErrorCode mf_pc_destroy(PC pc);
 	PetscErrorCode mf_lusgs(Vec x, Vec y);
-	PetscErrorCode mc_lusgs(Vec x, Vec y, Mat A);
-	StatusCode get_diagblk_inv (const Vec uvec, Mat A);
+	PetscErrorCode mc_lusgs(Vec x, Vec y);
+	//StatusCode get_diagblk_inv (const Vec uvec, Mat A);
 
 
 
