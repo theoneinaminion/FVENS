@@ -170,5 +170,15 @@ protected:
 	                                          scalar dgradr[NDIM][nvars][nvars]) const;
 };
 
+class LU_dat{
+
+	public:
+		Mat Lmat;
+		Mat Umat;
+		StatusCode get_LU(const Vec uvec, Mat A);
+
+	// NOT LU Decomposition
+};
+
 }	// end namespace
 #endif

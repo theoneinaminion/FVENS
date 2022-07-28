@@ -279,9 +279,9 @@ StatusCode Spatial<scalar,nvars>::assemble_jacobian(const Vec uvec, Mat A) const
 	}
 
 	// AB begin
-	MatrixFreePreconditioner mfp;
-	MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&mfp.Lmat);
-	MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&mfp.Umat);
+	//LU_dat mfp;
+	//MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&mfp.Lmat);
+	//MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&mfp.Umat);
 
 	// AB end
 
@@ -301,14 +301,14 @@ StatusCode Spatial<scalar,nvars>::assemble_jacobian(const Vec uvec, Mat A) const
 		{
 			ierr = MatSetValuesBlocked(A, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
 			// AB begin
-			ierr = MatSetValuesBlocked(mfp.Lmat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
+			//ierr = MatSetValuesBlocked(mfp.Lmat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
 			// AB end
 		}
 #pragma omp critical
 		{
 			ierr = MatSetValuesBlocked(A, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
 			// AB begin
-			ierr = MatSetValuesBlocked(mfp.Umat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
+			//ierr = MatSetValuesBlocked(mfp.Umat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
 			// AB end
 		}
 
@@ -341,7 +341,7 @@ StatusCode Spatial<scalar,nvars>::assemble_jacobian(const Vec uvec, Mat A) const
 			ierr = MatSetValuesBlocked(A, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
 
 			// AB begin
-			ierr = MatSetValuesBlocked(mfp.Umat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
+			//ierr = MatSetValuesBlocked(mfp.Umat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
 			// AB end
 		}
 
@@ -356,6 +356,77 @@ StatusCode Spatial<scalar,nvars>::assemble_jacobian(const Vec uvec, Mat A) const
 	return ierr;
 }
 
+
+
+template <typename scalar, int nvars>
+StatusCode Spatial<scalar,nvars>::getLU(const Vec uvec, Mat Lmat, Mat Umat){
+
+
+    using Eigen::Matrix; using Eigen::RowMajor;
+
+	StatusCode ierr = 0;
+
+	// Get comm to know if this is a serial or parallel assembly
+	MPI_Comm mycomm;
+	ierr = PetscObjectGetComm((PetscObject)A, &mycomm); CHKERRQ(ierr);
+	const int mpisize = get_mpi_size(mycomm);
+	const bool isdistributed = (mpisize > 1);
+
+	PetscInt locnelem;
+	ierr = VecGetLocalSize(uvec, &locnelem); CHKERRQ(ierr);
+	assert(locnelem % nvars == 0);
+	locnelem /= nvars;
+	assert(locnelem == m->gnelem());
+
+	ConstGhostedVecHandler<PetscScalar> uvh(uvec);
+	const PetscScalar *const uarr = uvh.getArray();
+
+#pragma omp parallel for default(shared)
+	for(fint iface = m->gSubDomFaceStart(); iface < m->gSubDomFaceEnd(); iface++)
+	{
+		const fint lelem = m->gintfac(iface,0);
+		const fint relem = m->gintfac(iface,1);
+		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
+		const fint relemg = isdistributed ? m->gglobalElemIndex(relem) : relem;
+
+		Matrix<freal,nvars,nvars,RowMajor> L;
+		Matrix<freal,nvars,nvars,RowMajor> U;
+		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
+
+#pragma omp critical
+		{
+			ierr = MatSetValuesBlocked(Lmat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
+		}
+#pragma omp critical
+		{
+			ierr = MatSetValuesBlocked(Umat, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
+		}
+
+		
+
+#pragma omp parallel for default(shared)
+	for(fint iface = m->gConnBFaceStart(); iface < m->gConnBFaceEnd(); iface++)
+	{
+		const fint lelem = m->gintfac(iface,0);
+		const fint relem = m->gintfac(iface,1);
+		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
+		const fint relemg = isdistributed ? m->gconnface(iface-m->gConnBFaceStart(), 3) : -1;
+
+		Matrix<freal,nvars,nvars,RowMajor> L;
+		Matrix<freal,nvars,nvars,RowMajor> U;
+		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
+
+#pragma omp critical
+		{
+			ierr = MatSetValuesBlocked(Umat, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
+		}
+
+		
+	}
+
+	return ierr;
+
+	} 
 
 template class Spatial<freal,NVARS>;
 template class Spatial<freal,1>;

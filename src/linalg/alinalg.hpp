@@ -161,6 +161,7 @@ public:
 	Mat Dinv; //inv of diagonal blocks
 	Mat Umat; // Upper triangular blocks
 	
+	
 
 	/// The residual of the state \ref uvec at which to compute the Jacobian
 	//Vec res;
@@ -168,7 +169,7 @@ public:
 	/// Time steps for each cell
 	//Vec mdt;
 
-	StatusCode get_LU_blockmat(const Vec uvec, Mat L, Mat U);
+	// StatusCode get_LU_blockmat(const Vec uvec, Mat L, Mat U);
 };
 
 	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell);
@@ -177,6 +178,7 @@ public:
 	PetscErrorCode mf_pc_destroy(PC pc);
 	PetscErrorCode mf_lusgs(Vec x, Vec y);
 	PetscErrorCode mc_lusgs(Vec x, Vec y);
+	
 	//StatusCode get_diagblk_inv (const Vec uvec, Mat A);
 
 

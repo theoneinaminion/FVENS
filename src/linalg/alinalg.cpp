@@ -387,75 +387,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 // AB
 
-/*
-	StatusCode MatrixFreePreconditioner::get_LU_blockmat(const Vec uvec, Mat Lmat, Mat Umat){
 
-
-		using Eigen::Matrix; using Eigen::RowMajor;
-
-	StatusCode ierr = 0;
-
-	// Get comm to know if this is a serial or parallel assembly
-	MPI_Comm mycomm;
-	ierr = PetscObjectGetComm((PetscObject)A, &mycomm); CHKERRQ(ierr);
-	const int mpisize = get_mpi_size(mycomm);
-	const bool isdistributed = (mpisize > 1);
-
-	PetscInt locnelem;
-	ierr = VecGetLocalSize(uvec, &locnelem); CHKERRQ(ierr);
-	assert(locnelem % nvars == 0);
-	locnelem /= nvars;
-	assert(locnelem == m->gnelem());
-
-	ConstGhostedVecHandler<PetscScalar> uvh(uvec);
-	const PetscScalar *const uarr = uvh.getArray();
-
-#pragma omp parallel for default(shared)
-	for(fint iface = m->gSubDomFaceStart(); iface < m->gSubDomFaceEnd(); iface++)
-	{
-		const fint lelem = m->gintfac(iface,0);
-		const fint relem = m->gintfac(iface,1);
-		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
-		const fint relemg = isdistributed ? m->gglobalElemIndex(relem) : relem;
-
-		Matrix<freal,nvars,nvars,RowMajor> L;
-		Matrix<freal,nvars,nvars,RowMajor> U;
-		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
-
-#pragma omp critical
-		{
-			ierr = MatSetValuesBlocked(Lmat, 1, &relemg, 1, &lelemg, L.data(), ADD_VALUES);
-		}
-#pragma omp critical
-		{
-			ierr = MatSetValuesBlocked(Umat, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
-		}
-
-		
-
-#pragma omp parallel for default(shared)
-	for(fint iface = m->gConnBFaceStart(); iface < m->gConnBFaceEnd(); iface++)
-	{
-		const fint lelem = m->gintfac(iface,0);
-		const fint relem = m->gintfac(iface,1);
-		const fint lelemg = isdistributed ? m->gglobalElemIndex(lelem) : lelem;
-		const fint relemg = isdistributed ? m->gconnface(iface-m->gConnBFaceStart(), 3) : -1;
-
-		Matrix<freal,nvars,nvars,RowMajor> L;
-		Matrix<freal,nvars,nvars,RowMajor> U;
-		compute_local_jacobian_interior(iface, &uarr[lelem*nvars], &uarr[relem*nvars], L, U);
-
-#pragma omp critical
-		{
-			ierr = MatSetValuesBlocked(Umat, 1, &lelemg, 1, &relemg, U.data(), ADD_VALUES);
-		}
-
-		
-	}
-
-	return ierr;
-
-	} */
 
 	//template <int nvars>
 	//StatusCode MatrixFreePreconditioner::
@@ -476,9 +408,14 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	// Set up matrix free PC
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
+	LU_dat lu;
+	
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv));CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
+
+
+
 	return 0;
 
 	}
@@ -487,8 +424,48 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 	//StatusCode MatrixFreePreconditioner::
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y){
 	// Set up matrix free PC
-	mc_lusgs(x,y);
-	return 0;
+	// MatrixFreePreconditioner mfp;
+		MatrixFreePreconditioner *shell;
+		PCShellGetContext(pc,&shell);
+		//mc_lusgs(x,y);
+		Vec y1;
+		Vec y2;
+		VecDuplicate(x,&y1);
+		VecDuplicate(x,&y2);
+
+		VecSet(y,0);
+		VecSet(y1,0);
+		VecSet(y2,0);
+
+		//fvens::MatrixFreePreconditioner *shell;
+		fvens::LU_dat lu;
+
+		PetscReal tol = 1e-3;
+
+		while (tol>1e-3)
+		{
+			Vec temp;
+			VecDuplicate(x,&temp);
+
+			// y1 = Dinv(x-Lmat*y1);
+			MatMult(lu.Lmat,y1,temp);
+			VecAXPY(temp,-1,x);
+			MatMult(shell->Dinv,temp,y1);
+
+			//y = y1 - Dinv * Umat * y
+			MatMult(lu.Umat,y,temp);
+			MatMult(shell->Dinv,temp,y);
+			VecAXPY(y,-1,y1);
+
+			// Residual to compute tolerance
+			VecAXPY(y,-1,y2);
+			VecNorm(y,NORM_2,&tol);
+			
+			//Storing the old vectors
+			VecCopy(y,y2);
+		}
+		return 0;
+		
 
 	}
 
@@ -501,8 +478,8 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
-	ierr = MatDestroy(&shell->Lmat);CHKERRQ(ierr);
-	ierr = MatDestroy(&shell->Umat);CHKERRQ(ierr);
+	//ierr = MatDestroy(&shell->Lmat);CHKERRQ(ierr);
+	//ierr = MatDestroy(&shell->Umat);CHKERRQ(ierr);
 	ierr = MatDestroy(&shell->Dinv);CHKERRQ(ierr);
 	ierr = PetscFree(shell);CHKERRQ(ierr);
 	return 0;
@@ -515,7 +492,7 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 
 
-
+/*
 PetscErrorCode mc_lusgs(Vec x, Vec y){
 
 	//Matrix A to apply LU-SGS in matrix format. 
@@ -532,7 +509,8 @@ PetscErrorCode mc_lusgs(Vec x, Vec y){
 	VecSet(y1,0);
 	VecSet(y2,0);
 
-	MatrixFreePreconditioner mfp;
+	fvens::MatrixFreePreconditioner *shell;
+	fvens::LU_dat lu;
 
 	PetscReal tol = 1e-3;
 
@@ -542,13 +520,13 @@ PetscErrorCode mc_lusgs(Vec x, Vec y){
 		VecDuplicate(x,&temp);
 
 		// y1 = Dinv(x-Lmat*y1);
-		MatMult(mfp.Lmat,y1,temp);
+		MatMult(lu.Lmat,y1,temp);
 		VecAXPY(temp,-1,x);
-		MatMult(mfp.Dinv,temp,y1);
+		MatMult(shell->Dinv,temp,y1);
 
 		//y = y1 - Dinv * Umat * y
-		MatMult(mfp.Lmat,y,temp);
-		MatMult(mfp.Dinv,temp,y);
+		MatMult(lu.Umat,y,temp);
+		MatMult(shell->Dinv,temp,y);
 		VecAXPY(y,-1,y1);
 
 		// Residual to compute tolerance
@@ -563,7 +541,7 @@ PetscErrorCode mc_lusgs(Vec x, Vec y){
 
 	return 0;
 	
-}
+}*/
 
 
 
