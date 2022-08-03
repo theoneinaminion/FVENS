@@ -491,6 +491,103 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 }
 
 
+PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
+
+	MatCopy(A,Lmat,SAME_NONZERO_PATTERN);
+	MatCopy(A,Umat,SAME_NONZERO_PATTERN);
+
+	PetscInt blk_size, m, n;
+
+	MatGetBlockSize(A,&blk_size);
+	MatGetSize(A, &m, &n); // get matrix size 
+
+	int b = m/blk_size;
+	PetscInt rows[blk_size];
+	PetscInt cols[blk_size];
+	PetscInt Val[blk_size][blk_size];
+
+	for (int i = 0; i < blk_size; i++)
+	{
+		for (int j = 0; j < blk_size; j++)
+		{
+			Val[i][j] = 0;
+		}
+		
+		
+	}
+	
+
+	for (int i = 0; i < b; i++)
+	{
+
+		int p = b*blk_size;
+		for (int j = 0; j < blk_size; j++)
+		{
+			rows[j] = p+j;
+			cols[j] = p+j;
+		}
+
+		// zero out the diagonal blocks
+
+		MatSetValues(Lmat,blk_size,rows,blk_size,cols,vals,INSERT_VALUES);
+		MatSetValues(Umat,blk_size,rows,blk_size,cols,vals,INSERT_VALUES);
+	
+		if (i==0)
+		{
+			// zeroing out upper triangular blocks in Lmat
+
+			for (int j = 0; j < blk_size; j++)
+			{
+				cols[j] = cols[j] + blk_size;
+
+			}
+			
+			MatSetValues(Lmat,blk_size,rows,blk_size,cols,vals,INSERT_VALUES);
+
+		}
+		else if (i==b-1)
+		{
+			// zeroing out lower triangular blocks in Umat
+
+			for (int j = 0; j < blk_size; j++)
+			{
+				cols[j] = rows[j] - blk_size;
+
+			}
+			
+			MatSetValues(Umat,blk_size,rows,blk_size,cols,vals,INSERT_VALUES);
+
+		}
+		else
+		{
+
+			// Zeroing out upper triangle blocks in Lmat
+
+			for (int j = 0; j < blk_size; j++)
+			{
+				cols[j] = cols[j] + blk_size;
+
+			}
+			
+			MatSetValues(Lmat,blk_size,rows,blk_size,cols,vals,INSERT_VALUES);
+
+			// zeroing out lower triangular blocks in Umat
+
+			for (int j = 0; j < blk_size; j++)
+			{
+				cols[j] = rows[j] - blk_size;
+
+			}
+			
+			MatSetValues(Umat,blk_size,rows,blk_size,cols,vals,INSERT_VALUES);
+
+			
+		}
+		
+	}
+
+}
+
 
 /*
 PetscErrorCode mc_lusgs(Vec x, Vec y){

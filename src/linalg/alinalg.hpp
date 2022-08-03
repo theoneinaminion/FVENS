@@ -162,6 +162,15 @@ public:
 	Mat Umat; // Upper triangular blocks
 	
 	
+	
+	/**
+	 * @brief Get LU blocks from A and writes it to Lmat and Umat 
+	 * 
+	 * @param A input matrix A
+	
+	 * @return PetscErrorCode 
+	 */
+	PetscErrorCode getLU(Mat A); 
 
 	/// The residual of the state \ref uvec at which to compute the Jacobian
 	//Vec res;
