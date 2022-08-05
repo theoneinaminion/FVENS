@@ -183,20 +183,6 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 	if ABFLAG {
 		StatusCode ierr = 0;
 		PC pc;
-
-		/*
-		Vec diag1;
-		PetscInt m,n;
-		MatGetSize(solver.A,&m,&n);
-		VecCreate(PETSC_COMM_WORLD,&diag1);
-		VecSetSizes(diag1,PETSC_DECIDE,m);
-		// const UMesh<freal,NDIM> *const m = space->mesh();
-		// ierr = createSystemVector(m, nvars, &diag1);
-		
-
-		ierr = MatGetDiagonal(solver.A,diag1);CHKERRQ(ierr);
-		*/
-
 		KSPGetPC(solver.ksp,&pc);
 		PetscBool  user_defined_pc = PETSC_TRUE; 
 		
@@ -210,13 +196,13 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 
 			PCSetType(pc, PCSHELL);
 			mf_pc_create(&mfpc);
-			PCShellSetApply(pc,&(mf_pc_apply));
-			PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
-			PCShellSetDestroy(pc,&(mf_pc_destroy));
-			PCShellSetName(pc,"LUSGS matrix-occupied");
+			ierr = PCShellSetApply(pc,&(mf_pc_apply));CHKERRQ(ierr);
+			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
+			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy)); CHKERRQ(ierr);
+			ierr = PCShellSetName(pc,"LUSGS matrix-occupied");CHKERRQ(ierr);
 			mf_pc_setup(pc,solver.A);
-			PetscCall(PCView(pc,viewer));
-			mf_pc_setup(pc,solver.A);
+			ierr = PCView(pc,viewer);CHKERRQ(ierr);
+			//mf_pc_setup(pc,solver.A);
 
 		}
 
@@ -226,7 +212,6 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 
 
 
-	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
 	return 0;
 }
 

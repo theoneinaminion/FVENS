@@ -357,7 +357,7 @@ StatusCode Spatial<scalar,nvars>::assemble_jacobian(const Vec uvec, Mat A) const
 }
 
 
-
+/*
 template <typename scalar, int nvars>
 StatusCode Spatial<scalar,nvars>::getLU(const Vec uvec, Mat Lmat, Mat Umat){
 
@@ -427,6 +427,7 @@ StatusCode Spatial<scalar,nvars>::getLU(const Vec uvec, Mat Lmat, Mat Umat){
 	return ierr;
 
 	} 
+}*/
 
 template class Spatial<freal,NVARS>;
 template class Spatial<freal,1>;

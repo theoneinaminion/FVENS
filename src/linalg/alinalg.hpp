@@ -161,7 +161,8 @@ public:
 	Mat Dinv; //inv of diagonal blocks
 	Mat Umat; // Upper triangular blocks
 	
-	
+	PetscErrorCode setmats(Mat A);
+
 	
 	/**
 	 * @brief Get LU blocks from A and writes it to Lmat and Umat 

@@ -456,6 +456,8 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 		ierr = MatZeroEntries(M); CHKERRQ(ierr);
 		ierr = space->assemble_jacobian(uvec, M); CHKERRQ(ierr);
 
+		
+
 		// curCFL = linearRamp(config.cflinit, config.cflfin,
 		//                     /*config.rampstart*/30, /*config.rampend*/100, step);
 		// (void)resiold;
