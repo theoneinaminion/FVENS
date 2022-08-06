@@ -495,15 +495,17 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 
 	// template <int nvars>
 	// StatusCode MatrixFreePreconditioner::
-	PetscErrorCode mf_pc_setup(PC pc, Mat A){
+	PetscErrorCode mf_pc_setup(PC pc){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
+	Mat A;
+	ierr= PCGetOperators(pc,NULL,&A);
 	//ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv)); CHKERRQ(ierr);
 
-	ierr = MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &(shell->Dinv));
-	ierr = MatScale(shell->Dinv,0);
+	ierr = MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &(shell->Dinv)); CHKERRQ(ierr);
+	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	//ierr = MatCreate(PETSC_COMM_SELF,&(shell->Dinv));
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 

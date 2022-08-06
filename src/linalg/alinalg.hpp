@@ -183,7 +183,7 @@ public:
 };
 
 	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell);
-	PetscErrorCode mf_pc_setup(PC pc, Mat A);
+	PetscErrorCode mf_pc_setup(PC pc);
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
 	PetscErrorCode mf_pc_destroy(PC pc);
 	PetscErrorCode mf_lusgs(Vec x, Vec y);
