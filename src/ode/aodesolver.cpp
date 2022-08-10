@@ -472,7 +472,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 		ierr = MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 		ierr = MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-	
+
 		/// Freezes the non-zero structure for efficiency in subsequent time steps.
 		ierr = MatSetOption(M, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE); CHKERRQ(ierr);
 

@@ -391,13 +391,18 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 
-
+	StatusCode ierr = 0;
 	// MatCopy(A,Lmat,SAME_NONZERO_PATTERN);
 	// MatCopy(A,Umat,SAME_NONZERO_PATTERN);
 
-	MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &Lmat);
-	MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &Umat);
-	
+	//MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &Lmat);
+	//MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &Umat);
+	//MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &D);
+
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&Lmat);CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&Umat);CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&D);CHKERRQ(ierr);
+
 	PetscInt blk_size; 
 	PetscInt m;
 	PetscInt n;
@@ -417,15 +422,13 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 
 			Val[i] = 0.0;
 		
-		
-		
 	}
 	
 	const PetscScalar *val1 = Val;
 	for (int i = 0; i < b; i++)
 	{
 
-		int p = b*blk_size;
+		int p = i*blk_size;
 		for (int j = 0; j < blk_size; j++)
 		{
 			rows[j] = p+j;
@@ -449,6 +452,7 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 			}
 			const PetscInt *cols1 = cols;
 			MatSetValues(Lmat,blk_size,rows1,blk_size,cols1,Val,INSERT_VALUES);
+			MatSetValues(D,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
 
 		}
 		if (i>0)
@@ -463,6 +467,7 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 			
 			const PetscInt *cols1 = cols;
 			MatSetValues(Lmat,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
+			MatSetValues(D,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
 
 		}
 		
@@ -473,10 +478,126 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 	MatAssemblyEnd(Lmat,MAT_FINAL_ASSEMBLY);
 	MatAssemblyBegin(Umat,MAT_FINAL_ASSEMBLY);
 	MatAssemblyEnd(Umat,MAT_FINAL_ASSEMBLY);
+	MatAssemblyBegin(D,MAT_FINAL_ASSEMBLY);
+	MatAssemblyEnd(D,MAT_FINAL_ASSEMBLY);
+
+	//checking whether the facorization is good
+	Mat S; 
+	ierr = MatDuplicate(Lmat,MAT_COPY_VALUES,&S);CHKERRQ(ierr);
+	//MatConvert(Lmat,MATSAME,MAT_INITIAL_MATRIX, &S);
+	ierr =MatAXPY(S,1,D, SAME_NONZERO_PATTERN);CHKERRQ(ierr);
+	ierr =MatAXPY(S,1,Umat, SAME_NONZERO_PATTERN);CHKERRQ(ierr);
+	ierr =MatAXPY(S,-1,A, SAME_NONZERO_PATTERN);CHKERRQ(ierr);
+	PetscReal nrm;
+	ierr =MatNorm(S,NORM_FROBENIUS,&nrm);CHKERRQ(ierr);
+
+	if (nrm <1e-6)
+	{
+		std::cout<<nrm<< "Hehe"<<std::endl;
+	}
+	else
+	{
+		std::cout<<nrm<< "Not Hehe"<<std::endl;
+
+	}
+	 
+
 
 	return 0;
 
 }
+
+void MatrixFreePreconditioner:: set_co(){
+	co = co- 1;
+}
+
+PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
+	StatusCode ierr = 0;
+
+	// MatCopy(A,Lmat,SAME_NONZERO_PATTERN);
+	// MatCopy(A,Umat,SAME_NONZERO_PATTERN);
+
+	//ierr =MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &Lmat);CHKERRQ(ierr);
+	//ierr =MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &Umat);CHKERRQ(ierr);
+	//ierr =MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &D);CHKERRQ(ierr);
+
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&Lmat);CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&Umat);CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&D);CHKERRQ(ierr);
+
+	PetscInt m;
+	PetscInt n;
+
+	MatGetSize(A, &m, &n); // get matrix size 
+
+	
+			
+	for (PetscInt i = 0; i < m; i++)
+	{
+		for (PetscInt j = 0; j < m; j++)
+		{
+			if (i==j)
+			{
+				ierr =MatSetValue(Lmat,i,j,0.0, INSERT_VALUES);CHKERRQ(ierr);
+				ierr =MatSetValue(Umat,i,j,0.0, INSERT_VALUES);CHKERRQ(ierr);
+			}
+			
+			if (i<j)
+			{
+				ierr =MatSetValue(Lmat,i,j,0.0, INSERT_VALUES);CHKERRQ(ierr);
+				ierr =MatSetValue(D,i,j,0.0, INSERT_VALUES);CHKERRQ(ierr);
+			}		
+			
+			if (i>j)
+			{
+				ierr =MatSetValue(Umat,i,j,0.0, INSERT_VALUES);CHKERRQ(ierr);
+				ierr =MatSetValue(D,i,j,0.0, INSERT_VALUES);CHKERRQ(ierr);
+			}
+		}
+			
+			
+		
+		
+	}
+	
+
+	MatAssemblyBegin(Lmat,MAT_FINAL_ASSEMBLY);
+	MatAssemblyEnd(Lmat,MAT_FINAL_ASSEMBLY);
+	MatAssemblyBegin(Umat,MAT_FINAL_ASSEMBLY);
+	MatAssemblyEnd(Umat,MAT_FINAL_ASSEMBLY);
+	MatAssemblyBegin(D,MAT_FINAL_ASSEMBLY);
+	MatAssemblyEnd(D,MAT_FINAL_ASSEMBLY);
+
+	
+	
+
+
+	//checking whether the facorization is good
+	Mat S; 
+	ierr = MatDuplicate(Lmat,MAT_COPY_VALUES,&S);CHKERRQ(ierr);
+	//ierr =MatConvert(Lmat,MATSAME,MAT_INITIAL_MATRIX, &S);CHKERRQ(ierr);
+	ierr =MatAXPY(S,1,D, SAME_NONZERO_PATTERN);CHKERRQ(ierr);
+	ierr =MatAXPY(S,1,Umat, SAME_NONZERO_PATTERN);CHKERRQ(ierr);
+	ierr =MatAXPY(S,-1,A, SAME_NONZERO_PATTERN);CHKERRQ(ierr);
+	PetscReal nrm;
+	ierr =MatNorm(S,NORM_FROBENIUS,&nrm);CHKERRQ(ierr);
+
+	
+	if (nrm <=1e-6)
+	{
+		std::cout<<nrm<< "Hehe"<<std::endl;
+	}
+	else
+	{
+		std::cout<<nrm<< "Not Hehe"<<std::endl;
+
+	}
+	 
+
+
+	return 0;
+}
+
 
 
 
@@ -502,14 +623,17 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	Mat A;
 	ierr= PCGetOperators(pc,NULL,&A);
-	//ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv)); CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv)); CHKERRQ(ierr);
 
 	ierr = MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &(shell->Dinv)); CHKERRQ(ierr);
-	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
+	//ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	//ierr = MatCreate(PETSC_COMM_SELF,&(shell->Dinv));
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 
-	shell->getLU(A);
+    //PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Amat.m", &viewer);
+
+
+	shell->nbgetLU(A);
 
 
 
@@ -536,7 +660,7 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 
 		//fvens::MatrixFreePreconditioner *shell;
 
-		PetscReal tol = 1e-3;
+		PetscReal tol = 1e-6;
 
 		while (tol>1e-3)
 		{

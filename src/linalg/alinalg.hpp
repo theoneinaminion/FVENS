@@ -160,9 +160,12 @@ public:
 	Mat Lmat; // Lower triangular blocks
 	Mat Dinv; //inv of diagonal blocks
 	Mat Umat; // Upper triangular blocks
+	Mat D; // Diag blocks
+	Vec diag; //diagonal elements 
+	int co=2;
 	
 	PetscErrorCode setmats(Mat A);
-
+	void set_co();
 	
 	/**
 	 * @brief Get LU blocks from A and writes it to Lmat and Umat 
@@ -172,6 +175,7 @@ public:
 	 * @return PetscErrorCode 
 	 */
 	PetscErrorCode getLU(Mat A); 
+	PetscErrorCode nbgetLU(Mat A); 
 
 	/// The residual of the state \ref uvec at which to compute the Jacobian
 	//Vec res;
