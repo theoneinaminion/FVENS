@@ -507,9 +507,7 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 
 }
 
-void MatrixFreePreconditioner:: set_co(){
-	co = co- 1;
-}
+
 
 PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 	StatusCode ierr = 0;
@@ -632,8 +630,16 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
     //PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Amat.m", &viewer);
 
+	/*PetscInt m;
+	PetscInt n;
+	MatGetSize(A, &m, &n);
+	VecCreate(PETSC_COMM_WORLD,&(shell->diag));
+	VecSetSizes(shell->diag,PETSC_DECIDE,m);
+    MatGetDiagonal(A,shell->diag);
+    VecReciprocal(shell->diag);
+    //shell->diag = diag1;*/
 
-	shell->nbgetLU(A);
+
 
 
 
@@ -671,9 +677,11 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 			MatMult(shell->Lmat,y1,temp);
 			VecAXPY(temp,-1,x);
 			MatMult(shell->Dinv,temp,y1);
+			//VecPointwiseMult(y1,x,shell->diag);
 
 			//y = y1 - Dinv * Umat * y
 			MatMult(shell->Umat,y,temp);
+			//VecPointwiseMult(y,x,shell->diag);
 			MatMult(shell->Dinv,temp,y);
 			VecAXPY(y,-1,y1);
 
