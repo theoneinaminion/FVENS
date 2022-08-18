@@ -68,6 +68,7 @@ public:
 
 	/// Computes and assembles the residual Jacobian
 	StatusCode assemble_jacobian(const Vec uvec, Mat A) const;
+	//StatusCode getLU(const Vec uvec, Mat Lmat, Mat Umat)
 
 	/// Computes the blocks of the Jacobian matrix for the flux across an interior face
 	/** It is supposed to be a point-block in dr/du when we want to solve [M du/dt +] r(u) = 0.

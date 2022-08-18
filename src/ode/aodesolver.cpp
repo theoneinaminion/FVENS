@@ -456,6 +456,16 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 		ierr = MatZeroEntries(M); CHKERRQ(ierr);
 		ierr = space->assemble_jacobian(uvec, M); CHKERRQ(ierr);
 
+
+		
+		/*
+		Mat Lmat; 
+		Mat Umat; 
+		ierr = MatConvert(M,MATSAME,MAT_INITIAL_MATRIX, &Lmat);
+	 	ierr = MatConvert(M,MATSAME,MAT_INITIAL_MATRIX, &Umat);
+		ierr = MatZeroEntries(Lmat); CHKERRQ(ierr);
+		ierr = MatZeroEntries(Umat); CHKERRQ(ierr);
+		ierr = space->getLU(uvec, Lmat, Umat); CHKERRQ(ierr); */
 		
 
 		// curCFL = linearRamp(config.cflinit, config.cflfin,
@@ -475,6 +485,51 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 		/// Freezes the non-zero structure for efficiency in subsequent time steps.
 		ierr = MatSetOption(M, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE); CHKERRQ(ierr);
+
+		if (step == 0){
+			/*std::cout<<"badum"<<std::endl;
+			MatrixFreePreconditioner shell;
+			shell.getLU(M);
+			ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell.Dinv)); CHKERRQ(ierr);
+
+			//ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
+			ierr = MatInvertBlockDiagonalMat(A,shell.Dinv); CHKERRQ(ierr);
+
+
+			PetscViewer viewer;
+			PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Dmat.m", &viewer));
+			PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));
+			PetscCall(MatView(shell.D,viewer));
+			PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Dinvmat.m", &viewer));
+			PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));
+			PetscCall(MatView(shell.Dinv,viewer));
+			PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Umat.m", &viewer));
+			PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));
+			PetscCall(MatView(shell.Umat,viewer));
+						PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Lmat.m", &viewer));
+			PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));
+			PetscCall(MatView(shell.Lmat,viewer));
+						PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Mmat.m", &viewer));
+			PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));
+			PetscCall(MatView(M,viewer));
+			PetscCall(PetscViewerPopFormat(viewer));
+			PetscCall(PetscViewerDestroy(&viewer));
+			std::cout<<"tss"<<std::endl;*/
+
+
+		std::cout<<"badum"<<std::endl;
+
+			PetscViewer viewer;
+			PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, "rhs.m", &viewer));
+			PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));
+			PetscCall(VecView(rvec,viewer));
+			PetscCall(PetscViewerPopFormat(viewer));
+			PetscCall(PetscViewerDestroy(&viewer));
+		std::cout<<"tss"<<std::endl;	
+	}
+	
+		
+
 
 		// setup and solve linear system for the update du
 	
@@ -580,6 +635,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 		std::cout << "  SteadySolver: solve(): Time taken by linear solver:";
 		std::cout << " CPU time = " << linctime << std::endl;
 	}
+
 
 	// If requested, write out final linear system
 	if(config.write_final_lin_sys)

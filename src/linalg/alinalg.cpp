@@ -441,37 +441,42 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 		MatSetValues(Lmat,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
 		MatSetValues(Umat,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
 	
-		if (i<b-1)
+		
+		// Zero out the upper triangular blocks in Lmat and D
+
+		for (int j = i+1; j < b; j++)
 		{
-			// zeroing out upper triangular blocks in Lmat
-
-			for (int j = 0; j < blk_size; j++)
+			for (int k = 0; k<blk_size; k++)
 			{
-				cols[j] = cols[j] + blk_size;
-
-			}
-			const PetscInt *cols1 = cols;
-			MatSetValues(Lmat,blk_size,rows1,blk_size,cols1,Val,INSERT_VALUES);
-			MatSetValues(D,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
-
-		}
-		if (i>0)
-		{
-			// zeroing out lower triangular blocks in Umat
-
-			for (int j = 0; j < blk_size; j++)
-			{
-				cols[j] = rows[j] - blk_size;
+				cols[k] = cols[k] + blk_size;
 
 			}
 			
 			const PetscInt *cols1 = cols;
 			MatSetValues(Lmat,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
 			MatSetValues(D,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
-
 		}
 		
-		
+		// zero out the lower triangle blocks in Umat and D
+		for (int j = 0; j < blk_size; j++)
+		{
+			
+			cols[j] = rows[j];
+		}
+		for (int j = i-1; j >=0; j--)
+		{
+			for (int k = 0; k<blk_size; k++)
+			{
+				cols[k] = cols[k] - blk_size;
+
+			}
+			
+			const PetscInt *rows1 = rows;
+			const PetscInt *cols1 = cols;
+			MatSetValues(Umat,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
+			MatSetValues(D,blk_size,rows1,blk_size,cols1,val1,INSERT_VALUES);
+		}
+
 	}
 
 	MatAssemblyBegin(Lmat,MAT_FINAL_ASSEMBLY);
@@ -481,27 +486,8 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 	MatAssemblyBegin(D,MAT_FINAL_ASSEMBLY);
 	MatAssemblyEnd(D,MAT_FINAL_ASSEMBLY);
 
+
 	//checking whether the facorization is good
-	Mat S; 
-	ierr = MatDuplicate(Lmat,MAT_COPY_VALUES,&S);CHKERRQ(ierr);
-	//MatConvert(Lmat,MATSAME,MAT_INITIAL_MATRIX, &S);
-	ierr =MatAXPY(S,1,D, SAME_NONZERO_PATTERN);CHKERRQ(ierr);
-	ierr =MatAXPY(S,1,Umat, SAME_NONZERO_PATTERN);CHKERRQ(ierr);
-	ierr =MatAXPY(S,-1,A, SAME_NONZERO_PATTERN);CHKERRQ(ierr);
-	PetscReal nrm;
-	ierr =MatNorm(S,NORM_FROBENIUS,&nrm);CHKERRQ(ierr);
-
-	if (nrm <1e-6)
-	{
-		std::cout<<nrm<< "Hehe"<<std::endl;
-	}
-	else
-	{
-		std::cout<<nrm<< "Not Hehe"<<std::endl;
-
-	}
-	 
-
 
 	return 0;
 
@@ -623,13 +609,14 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 	ierr= PCGetOperators(pc,NULL,&A);
 	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv)); CHKERRQ(ierr);
 
-	ierr = MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &(shell->Dinv)); CHKERRQ(ierr);
-	//ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
+	//ierr = MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &(shell->Dinv)); CHKERRQ(ierr);
+	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	//ierr = MatCreate(PETSC_COMM_SELF,&(shell->Dinv));
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
+	shell->getLU(A);
 
-    //PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Amat.m", &viewer);
 
+	
 	/*PetscInt m;
 	PetscInt n;
 	MatGetSize(A, &m, &n);
@@ -638,11 +625,6 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
     MatGetDiagonal(A,shell->diag);
     VecReciprocal(shell->diag);
     //shell->diag = diag1;*/
-
-
-
-
-
 	return 0;
 
 	}
@@ -652,8 +634,9 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y){
 	// Set up matrix free PC
 	// MatrixFreePreconditioner mfp;
+		PetscInt ierr = 0;
 		MatrixFreePreconditioner *shell;
-		PCShellGetContext(pc,&shell);
+		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 		//mc_lusgs(x,y);
 		Vec y1;
 		Vec y2;
@@ -665,8 +648,9 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 		VecSet(y2,0);
 
 		//fvens::MatrixFreePreconditioner *shell;
-
-		PetscReal tol = 1e-6;
+			
+		
+		PetscReal tol = 10;
 
 		while (tol>1e-3)
 		{
@@ -675,7 +659,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 			// y1 = Dinv(x-Lmat*y1);
 			MatMult(shell->Lmat,y1,temp);
-			VecAXPY(temp,-1,x);
+			VecAYPX(temp,-1,x);
 			MatMult(shell->Dinv,temp,y1);
 			//VecPointwiseMult(y1,x,shell->diag);
 
@@ -683,7 +667,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 			MatMult(shell->Umat,y,temp);
 			//VecPointwiseMult(y,x,shell->diag);
 			MatMult(shell->Dinv,temp,y);
-			VecAXPY(y,-1,y1);
+			VecAYPX(y,-1,y1);
 
 			// Residual to compute tolerance
 			VecAXPY(y,-1,y2);
@@ -691,6 +675,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 			
 			//Storing the old vectors
 			VecCopy(y,y2);
+			std::cout<<tol<<std::endl;
 		}
 		return 0;
 		

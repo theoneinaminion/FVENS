@@ -133,39 +133,13 @@ StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,nvars> *const start
 class MatrixFreePreconditioner
 {
 public:
-	/// Query the Petsc options database for a custom option for setting the step length epsilon
-	/** The finite difference step length epsilon is given a default value.
-	 * \param[in] spatial_discretization The spatial discretization of which this objact
-	 *   will act as Jacobian
-	 */
-	// MatrixFreePreconditioner(const Spatial<freal,nvars> *const spatial_discretization);
-
-	/// Set the state u at which the Jacobian is computed, the corresponding residual r(u) and 
-	/// the diagonal vector of the mass matrix for each cell
-	/** Note that the residual vector supplied is assumed to be the negative of what is needed,
-	 * exactly what Spatial::compute_residual gives.
-	 */
-	// PetscErrorCode mf_pc_create(MatrixFreePreconditioner shell);
-	// PetscErrorCode mf_pc_setup(PC pc, Mat A, Vec x);
-	// PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
-	// PetscErrorCode mf_pc_destroy(PC pc);
-
-//protected:
-	/// Spatial discretization context
-	//const Spatial<freal,nvars> *const spatial;
-
-	/// step length for finite difference Jacobian
-	//freal eps;
 
 	Mat Lmat; // Lower triangular blocks
 	Mat Dinv; //inv of diagonal blocks
 	Mat Umat; // Upper triangular blocks
 	Mat D; // Diag blocks
 	Vec diag; //diagonal elements 
-	int co=2;
 	
-	PetscErrorCode setmats(Mat A);
-	void set_co();
 	
 	/**
 	 * @brief Get LU blocks from A and writes it to Lmat and Umat 
@@ -177,13 +151,7 @@ public:
 	PetscErrorCode getLU(Mat A); 
 	PetscErrorCode nbgetLU(Mat A); 
 
-	/// The residual of the state \ref uvec at which to compute the Jacobian
-	//Vec res;
 
-	/// Time steps for each cell
-	//Vec mdt;
-
-	// StatusCode get_LU_blockmat(const Vec uvec, Mat L, Mat U);
 };
 
 	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell);
