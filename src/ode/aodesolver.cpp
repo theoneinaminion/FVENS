@@ -486,8 +486,8 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 		/// Freezes the non-zero structure for efficiency in subsequent time steps.
 		ierr = MatSetOption(M, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE); CHKERRQ(ierr);
 
-		if (step == 0){
-			/*std::cout<<"badum"<<std::endl;
+		/*if (step == 0){
+			std::cout<<"badum"<<std::endl;
 			MatrixFreePreconditioner shell;
 			shell.getLU(M);
 			ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell.Dinv)); CHKERRQ(ierr);
@@ -514,7 +514,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 			PetscCall(MatView(M,viewer));
 			PetscCall(PetscViewerPopFormat(viewer));
 			PetscCall(PetscViewerDestroy(&viewer));
-			std::cout<<"tss"<<std::endl;*/
+			std::cout<<"tss"<<std::endl;
 
 
 		std::cout<<"badum"<<std::endl;
@@ -526,7 +526,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 			PetscCall(PetscViewerPopFormat(viewer));
 			PetscCall(PetscViewerDestroy(&viewer));
 		std::cout<<"tss"<<std::endl;	
-	}
+	}*/
 	
 		
 

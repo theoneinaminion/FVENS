@@ -639,42 +639,56 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 		//mc_lusgs(x,y);
 		Vec y1;
-		Vec y2;
+		Vec y2,y3,temp;
 		VecDuplicate(x,&y1);
 		VecDuplicate(x,&y2);
+		VecDuplicate(x,&y3);
+		VecDuplicate(x,&temp);
 
-		VecSet(y,0);
 		VecSet(y1,0);
-		VecSet(y2,0);
+		VecAssemblyBegin(y1);
+		VecAssemblyEnd(y1);
 
 		//fvens::MatrixFreePreconditioner *shell;
 			
 		
-		PetscReal tol = 10;
+		PetscReal tol1 = 10;
 
-		while (tol>1e-3)
+		while (tol1>1e-3)
 		{
-			Vec temp;
-			VecDuplicate(x,&temp);
+			VecCopy(y2,y1);
 
 			// y1 = Dinv(x-Lmat*y1);
-			MatMult(shell->Lmat,y1,temp);
-			VecAYPX(temp,-1,x);
-			MatMult(shell->Dinv,temp,y1);
+			MatMult(shell->Lmat,y1,temp); //temp = Lmat*y1
+			VecAYPX(temp,-1,x);//temp = x-Lmat*y1
+			MatMult(shell->Dinv,temp,y1); //Dinv(x-Lmat*y1)
 			//VecPointwiseMult(y1,x,shell->diag);
 
+			// error tol to check convergence
+			VecAXPY(y1,-1,y2);
+			VecNorm(y1,NORM_2,&tol1);
+			std::cout<<tol1<<"tol1"<<std::endl;
+
+		}
+
+		PetscReal tol = 10;
+		VecCopy(y1,y);
+		while (tol>1e-3)
+		{
+			VecCopy(y,y3);
+
 			//y = y1 - Dinv * Umat * y
-			MatMult(shell->Umat,y,temp);
+			MatMult(shell->Umat,y,temp); // temp = Umat * y
 			//VecPointwiseMult(y,x,shell->diag);
-			MatMult(shell->Dinv,temp,y);
-			VecAYPX(y,-1,y1);
+			MatMult(shell->Dinv,temp,y); //y = Dinv * Umat * y
+			VecAYPX(y,-1,y1); //y = y1 - Dinv * Umat * y
 
 			// Residual to compute tolerance
-			VecAXPY(y,-1,y2);
+			VecAXPY(y,-1,y3);
 			VecNorm(y,NORM_2,&tol);
 			
 			//Storing the old vectors
-			VecCopy(y,y2);
+			
 			std::cout<<tol<<std::endl;
 		}
 		return 0;
