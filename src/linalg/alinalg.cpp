@@ -638,58 +638,63 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 		MatrixFreePreconditioner *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 		//mc_lusgs(x,y);
-		Vec y1;
-		Vec y2,y3,temp;
-		VecDuplicate(x,&y1);
-		VecDuplicate(x,&y2);
-		VecDuplicate(x,&y3);
-		VecDuplicate(x,&temp);
+		Vec y1,y2,y3,temp,nrm;
+		ierr = VecDuplicate(x,&y1);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&y2);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&y3);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&temp);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&nrm);CHKERRQ(ierr);
 
-		VecSet(y1,0);
-		VecAssemblyBegin(y1);
-		VecAssemblyEnd(y1);
+		// initial guess 
+		ierr = VecSet(y1,0);CHKERRQ(ierr);
+		ierr = VecAssemblyBegin(y1);CHKERRQ(ierr);
+		ierr = VecAssemblyEnd(y1);CHKERRQ(ierr);
 
-		//fvens::MatrixFreePreconditioner *shell;
-			
-		
+
+		//int it = 0;
 		PetscReal tol1 = 10;
 
-		while (tol1>1e-3)
-		{
-			VecCopy(y2,y1);
+		while (tol1>1e-6)
+		{	
+			ierr =VecCopy(y1,y2);CHKERRQ(ierr);
 
 			// y1 = Dinv(x-Lmat*y1);
 			MatMult(shell->Lmat,y1,temp); //temp = Lmat*y1
-			VecAYPX(temp,-1,x);//temp = x-Lmat*y1
-			MatMult(shell->Dinv,temp,y1); //Dinv(x-Lmat*y1)
+
+
+			ierr =VecAYPX(temp,-1.0,x);CHKERRQ(ierr);//temp = x-Lmat*y1
+			ierr =MatMult(shell->Dinv,temp,y1);CHKERRQ(ierr); //Dinv(x-Lmat*y1)
 			//VecPointwiseMult(y1,x,shell->diag);
 
 			// error tol to check convergence
-			VecAXPY(y1,-1,y2);
-			VecNorm(y1,NORM_2,&tol1);
-			std::cout<<tol1<<"tol1"<<std::endl;
+			ierr = VecWAXPY(nrm,-1.0,y1,y2);CHKERRQ(ierr);
+			ierr =VecNorm(nrm,NORM_2,&tol1);CHKERRQ(ierr);
+			//std::cout<<tol1<<"tol1"<<std::endl;
+
+			
+
 
 		}
 
 		PetscReal tol = 10;
-		VecCopy(y1,y);
-		while (tol>1e-3)
+		ierr =VecCopy(y1,y);
+		while (tol>1e-6)
 		{
-			VecCopy(y,y3);
+			ierr =VecCopy(y,y3);CHKERRQ(ierr);
 
 			//y = y1 - Dinv * Umat * y
-			MatMult(shell->Umat,y,temp); // temp = Umat * y
+			ierr =MatMult(shell->Umat,y,temp);CHKERRQ(ierr); // temp = Umat * y
 			//VecPointwiseMult(y,x,shell->diag);
-			MatMult(shell->Dinv,temp,y); //y = Dinv * Umat * y
-			VecAYPX(y,-1,y1); //y = y1 - Dinv * Umat * y
+			ierr =MatMult(shell->Dinv,temp,y);CHKERRQ(ierr); //y = Dinv * Umat * y
+			ierr =VecAYPX(y,-1.0,y1);CHKERRQ(ierr); //y = y1 - Dinv * Umat * y
 
 			// Residual to compute tolerance
-			VecAXPY(y,-1,y3);
-			VecNorm(y,NORM_2,&tol);
+			ierr = VecWAXPY(nrm,-1.0,y,y3);CHKERRQ(ierr);
+			ierr =VecNorm(nrm,NORM_2,&tol);CHKERRQ(ierr);
 			
 			//Storing the old vectors
 			
-			std::cout<<tol<<std::endl;
+			//std::cout<<tol<<"tol"<<std::endl;
 		}
 		return 0;
 		
