@@ -195,7 +195,7 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
   			//PetscCall(PetscViewerSetType(viewer,PETSCVIEWERASCII));
 
 			PCSetType(pc, PCSHELL);
-			mf_pc_create(&mfpc);
+			mf_pc_create(&mfpc); // pass extra vectors etc here. 
 			ierr = PCShellSetApply(pc,&(mf_pc_apply));CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
 			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy)); CHKERRQ(ierr);
