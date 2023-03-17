@@ -592,15 +592,16 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *newctx;
 	ierr = PetscNew(&newctx);CHKERRQ(ierr);
-	// newctx->diag = 0;
+
 	*shell = newctx;
 	return 0;
 	}
 	
 
+
 	// template <int nvars>
 	// StatusCode MatrixFreePreconditioner::
-	PetscErrorCode mf_pc_setup(PC pc){
+	PetscErrorCode mf_pc_setup(PC pc, Vec u){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
@@ -613,18 +614,10 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	//ierr = MatCreate(PETSC_COMM_SELF,&(shell->Dinv));
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
-	shell->getLU(A);
 
+	ierr = KSPGetRhs(pc, &(shell->res)); CHKERRQ(ierr);
+	ierr = VecCopy(u, shell->uvec); CHKERRQ(ierr);
 
-	
-	/*PetscInt m;
-	PetscInt n;
-	MatGetSize(A, &m, &n);
-	VecCreate(PETSC_COMM_WORLD,&(shell->diag));
-	VecSetSizes(shell->diag,PETSC_DECIDE,m);
-    MatGetDiagonal(A,shell->diag);
-    VecReciprocal(shell->diag);
-    //shell->diag = diag1;*/
 	return 0;
 
 	}

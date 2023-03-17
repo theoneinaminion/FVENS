@@ -164,7 +164,7 @@ FlowSolutionFunctionals FlowCase::run_output(const bool surface_file_needed,
 			std::get<0>(fnls), std::get<1>(fnls), std::get<2>(fnls)};
 }
 
-int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
+int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac,Vec u) {
 	// initialize solver
 	int ierr = KSPCreate(PETSC_COMM_WORLD, &solver.ksp); petsc_throw(ierr, "KSP Create");
 	if(use_mfjac) {
@@ -174,13 +174,21 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 	else {
 		ierr = KSPSetOperators(solver.ksp, solver.M, solver.M); 
 		petsc_throw(ierr, "KSP set operators");
-	}
+
 
 	// AB
 
 	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
+	
+	if(ABFLAG)
+		FlowCase::setupABKSP(LinearProblemLHS& solver, const bool use_mfjac,Vec u);
+	
 
-	if ABFLAG {
+
+
+	return 0;
+}
+int FlowCase::setupABKSP(LinearProblemLHS& solver, const bool use_mfjac,Vec u){
 		StatusCode ierr = 0;
 		PC pc;
 		KSPGetPC(solver.ksp,&pc);
@@ -195,7 +203,8 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
   			//PetscCall(PetscViewerSetType(viewer,PETSCVIEWERASCII));
 
 			PCSetType(pc, PCSHELL);
-			mf_pc_create(&mfpc); // pass extra vectors etc here. 
+			mf_pc_create(&mfpc); 
+			mf_pc_setup(pc,solver.A, u);
 			ierr = PCShellSetApply(pc,&(mf_pc_apply));CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
 			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy)); CHKERRQ(ierr);
@@ -208,16 +217,10 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 		}
 
 
-	}
-	
-
-
-
-	return 0;
 }
-
+	
 FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVARS> *const space,
-                                                         const bool use_mfjac)
+                                                         const bool use_mfjac, Vec u)
 {
 	LinearProblemLHS solver;
 	const UMesh<freal,NDIM> *const mesh = space->mesh();
@@ -232,7 +235,7 @@ FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVA
 		fvens_throw(ierr, "Setup matrix-free Jacobian");
 	}
 
-	setupKSP(solver, use_mfjac);
+	setupKSP(solver, use_mfjac, u);
 	solver.mf_flg = use_mfjac;
 
 	return solver;

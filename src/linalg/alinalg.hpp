@@ -9,6 +9,7 @@
 #include "aconstants.hpp"
 #include "mesh/mesh.hpp"
 #include "spatial/aspatial.hpp"
+#include "spatial/flow_spatial.hpp" // added to access the compute_residual() function in mf_pcapply() 
 
 #include <petscksp.h>
 
@@ -139,7 +140,8 @@ public:
 	Mat Umat; // Upper triangular blocks
 	Mat D; // Diag blocks
 	Vec diag; //diagonal elements 
-	
+	Vec res; //residual vector 
+	Vec uvec; //solution vector 
 	
 	/**
 	 * @brief Get LU blocks from A and writes it to Lmat and Umat 
@@ -155,7 +157,7 @@ public:
 };
 
 	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell);
-	PetscErrorCode mf_pc_setup(PC pc);
+	PetscErrorCode mf_pc_setup(PC pc, Vec u);
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
 	PetscErrorCode mf_pc_destroy(PC pc);
 	PetscErrorCode mf_lusgs(Vec x, Vec y);
