@@ -180,35 +180,6 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 
 	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
 
-	if ABFLAG {
-		StatusCode ierr = 0;
-		PC pc;
-		KSPGetPC(solver.ksp,&pc);
-		PetscBool  user_defined_pc = PETSC_TRUE; 
-		
-		PetscOptionsGetBool(NULL,NULL,"-user_defined_pc",&user_defined_pc,NULL);
-		if (user_defined_pc) 
-		{   
-			MatrixFreePreconditioner *mfpc;
-			//PetscViewer viewer;
-			//PetscCall(PetscViewerCreate(PETSC_COMM_WORLD,&viewer));
-  			//PetscCall(PetscViewerSetType(viewer,PETSCVIEWERASCII));
-
-			PCSetType(pc, PCSHELL);
-			mf_pc_create(&mfpc); // pass extra vectors etc here. 
-			ierr = PCShellSetApply(pc,&(mf_pc_apply));CHKERRQ(ierr);
-			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
-			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy)); CHKERRQ(ierr);
-			ierr = PCShellSetName(pc,"LUSGS matrix-occupied");CHKERRQ(ierr);
-			ierr = PCShellSetSetUp(pc,&(mf_pc_setup)); CHKERRQ(ierr); 
-			//mf_pc_setup(pc,solver.M);
-			//ierr = PCView(pc,viewer);CHKERRQ(ierr);
-			//mf_pc_setup(pc,solver.A);
-
-		}
-
-
-	}
 	
 
 
