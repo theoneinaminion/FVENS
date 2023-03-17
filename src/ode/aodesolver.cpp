@@ -450,11 +450,6 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 		
 		// update residual and local time steps
 		ierr = space->compute_residual(uvec, rvec, true, dtmvec); CHKERRQ(ierr);
-<<<<<<< HEAD
-		
-		if(ABFLAG)
-			ierr = <class>->setupABKSP(solver, uvec);
-=======
 
 		
 	if ABFLAG {
@@ -488,7 +483,6 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 	}
 
->>>>>>> HEAD@{1}
 		ierr = VecGhostUpdateBegin(rvec, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
 		ierr = MatZeroEntries(M); CHKERRQ(ierr);
