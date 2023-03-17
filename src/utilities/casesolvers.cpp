@@ -184,6 +184,7 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac,Vec u) {
 		FlowCase::setupABKSP(LinearProblemLHS& solver, const bool use_mfjac,Vec u);
 	
 
+<<<<<<< HEAD
 
 
 	return 0;
@@ -217,6 +218,13 @@ int FlowCase::setupABKSP(LinearProblemLHS& solver, const bool use_mfjac,Vec u){
 		}
 
 
+=======
+	
+
+
+
+	return 0;
+>>>>>>> HEAD@{1}
 }
 	
 FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVARS> *const space,
