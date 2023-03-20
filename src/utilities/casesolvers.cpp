@@ -164,7 +164,7 @@ FlowSolutionFunctionals FlowCase::run_output(const bool surface_file_needed,
 			std::get<0>(fnls), std::get<1>(fnls), std::get<2>(fnls)};
 }
 
-int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac,Vec u) {
+int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 	// initialize solver
 	int ierr = KSPCreate(PETSC_COMM_WORLD, &solver.ksp); petsc_throw(ierr, "KSP Create");
 	if(use_mfjac) {
@@ -174,7 +174,7 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac,Vec u) {
 	else {
 		ierr = KSPSetOperators(solver.ksp, solver.M, solver.M); 
 		petsc_throw(ierr, "KSP set operators");
-
+	}
 
 	// AB
 
@@ -185,7 +185,7 @@ int FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac,Vec u) {
 }
 	
 FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVARS> *const space,
-                                                         const bool use_mfjac, Vec u)
+                                                         const bool use_mfjac)
 {
 	LinearProblemLHS solver;
 	const UMesh<freal,NDIM> *const mesh = space->mesh();
@@ -200,7 +200,7 @@ FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVA
 		fvens_throw(ierr, "Setup matrix-free Jacobian");
 	}
 
-	setupKSP(solver, use_mfjac, u);
+	setupKSP(solver, use_mfjac);
 	solver.mf_flg = use_mfjac;
 
 	return solver;
