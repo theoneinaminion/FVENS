@@ -601,7 +601,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 	// template <int nvars>
 	// StatusCode MatrixFreePreconditioner::
-	PetscErrorCode mf_pc_setup(PC pc){
+	PetscErrorCode mf_pc_setup(PC pc, Vec u, Vec r){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
@@ -609,13 +609,16 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 	Mat A;
 	ierr= PCGetOperators(pc,NULL,&A);
 	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv)); CHKERRQ(ierr);
+	ierr = MatGetBlockSize(A,&(shell->blk_size));CHKERRQ(ierr);
+	ierr = MatGetSize(A, &(shell->m), &(shell->n));CHKERRQ(ierr); // get matrix size  
 
 	//ierr = MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &(shell->Dinv)); CHKERRQ(ierr);
 	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	//ierr = MatCreate(PETSC_COMM_SELF,&(shell->Dinv));
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 	shell->getLU(A);
-
+	ierr = VecCopy(u,shell->uvec);CHKERRQ(ierr);
+	ierr = VecCopy(r,shell->rvec);CHKERRQ(ierr);
 
 	
 	/*PetscInt m;
@@ -638,18 +641,101 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 		MatrixFreePreconditioner *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 		//mc_lusgs(x,y);
-		Vec y1,y2,y3,temp,nrm;
-		ierr = VecDuplicate(x,&y1);CHKERRQ(ierr);
-		ierr = VecDuplicate(x,&y2);CHKERRQ(ierr);
-		ierr = VecDuplicate(x,&y3);CHKERRQ(ierr);
+		Vec temp,nrm,ust, rst, blank, yst, yst1;
 		ierr = VecDuplicate(x,&temp);CHKERRQ(ierr);
 		ierr = VecDuplicate(x,&nrm);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&ust);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&rst);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&blank);CHKERRQ(ierr);
 
-		// initial guess 
-		ierr = VecSet(y1,0);CHKERRQ(ierr);
-		ierr = VecAssemblyBegin(y1);CHKERRQ(ierr);
-		ierr = VecAssemblyEnd(y1);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&yst);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&yst1);CHKERRQ(ierr);
 
+
+		// matfree
+		PetscReal tol1 = 10;
+		PetscReal nrm2,nrm1, eps;
+		PetscInt vecsize;
+		ierr = VecCopy(x,yst);
+		while (tol1>1e-6)
+		{	
+			ierr =VecCopy(yst,yst1);CHKERRQ(ierr);
+
+			ierr = VecNorm (yst,NORM_2,&nrm2);CHKERRQ(ierr);
+			ierr = VecGetSize (yst,&vecsize);CHKERRQ(ierr);
+			ierr = VecNorm (shell->uvec,NORM_1,&nrm1);CHKERRQ(ierr);
+			eps = nrm1/(vecsize*nrm2);
+			eps = eps*(10^(-6))+10^(-6); // epsilon used in matrix-free finite diff
+			ierr = VecScale(y1,eps);CHKERRQ(ierr); // y1 = eps*y1
+			ierr = VecWAXPY(ust,1.0,yst,shell->uvec);CHKERRQ(ierr);
+
+
+			const Spatial<freal,nvars> *const sp;
+			ierr = sp->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*y1)
+
+			// Looping over the elements
+
+			PetscInt b = (shell->n)/(shell->blk_size);
+
+			for (int i = 0; i < b; i++)
+			{
+				int p = i*blk_size;
+				Vec sum;
+				ierr = VecCreate(PETSC_COMM_SELF, &sum);CHKERRQ(ierr);
+				ierr = VecSetSizes(sum, shell->blk_size, PETSC_DECIDE);CHKERRQ(ierr);
+				ierr = VecSet(sum,0);CHKERRQ(ierr);
+				ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(sum);CHKERRQ(ierr);
+
+				for (int j = 0; j < i; j++)
+				{					
+					const PetscInt idx[shell->blk_size];
+					for (int k = 0; k < blk_size; k++)
+					{
+						idx[k] = i*j+k; // figure out this loop
+					}
+					PetscScalar rsty[shell->blk_size], ry[shell->blk_size];
+
+					// get respective values of r(w+eps*z) and r(w) in he given block.
+					ierr = VecGetValues(shell->rvec,shell->blk_size,idx,ry);CHKERRQ(ierr);
+					ierr = VecGetValues(rst,shell->blk_size,idx,rsty);CHKERRQ(ierr);
+					
+					
+					for (int k = 0; k < blk_size; k++)
+					{	
+						const PetscScalar val = (rsty[k]-ry[k])/eps;
+						ierr = VecSetValues(sum,1,k,val,ADD_VALUES); CHKERRQ(ierr);
+					}
+					ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
+					ierr = VecAssemblyEnd(sum);CHKERRQ(ierr);
+
+
+				}
+
+				for (int k = 0; k < blk_size; k++)
+				{
+					idx[k] = p+k; // figure out this loop
+	
+				}
+				PetscScalar xget[shell->blk_size],sum_get;
+				ierr = VecGetValues(x,shell->blk_size,idx,xget);CHKERRQ(ierr);
+				
+				for (int k = 0; k < blk_size; k++)
+				{
+					ierr = VecGetValues(sum,1,1,sum_get);CHKERRQ(ierr);
+					val  = xget[k]-sum_get;
+					ierr = VecSetValues(temp,1,k,val,INSERT_VALUES); CHKERRQ(ierr);
+				}
+				
+				
+			}
+
+
+			// error tol to check convergence
+			ierr = VecWAXPY(nrm,-1.0,ys1,yst1);CHKERRQ(ierr);
+			ierr =VecNorm(nrm,NORM_2,&tol1);CHKERRQ(ierr);
+			//std::cout<<tol1<<"tol1"<<std::endl;
+		}
 
 		//int it = 0;
 		PetscReal tol1 = 10;

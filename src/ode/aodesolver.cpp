@@ -468,12 +468,13 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 			PCSetType(pc, PCSHELL);
 			mf_pc_create(&mfpc); // pass extra vectors etc here. 
+			mf_pc_setup(pc, uvec, rvec);
 			ierr = PCShellSetApply(pc,&(mf_pc_apply));CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
 			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy)); CHKERRQ(ierr);
 			ierr = PCShellSetName(pc,"LUSGS matrix-occupied");CHKERRQ(ierr);
 			ierr = PCShellSetSetUp(pc,&(mf_pc_setup)); CHKERRQ(ierr); 
-			//mf_pc_setup(pc,solver.M);
+			
 			//ierr = PCView(pc,viewer);CHKERRQ(ierr);
 			//mf_pc_setup(pc,solver.A);
 			std::cout<<"yo whats up"<<std::endl;
