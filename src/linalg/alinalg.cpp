@@ -601,7 +601,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 	// template <int nvars>
 	// StatusCode MatrixFreePreconditioner::
-	PetscErrorCode mf_pc_setup(PC pc, Vec u, Vec r){
+	PetscErrorCode mf_pc_setup(PC pc, Vec u, Vec r,const Spatial<freal,nvars> *const space){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
 	MatrixFreePreconditioner *shell;
@@ -611,10 +611,9 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv)); CHKERRQ(ierr);
 	ierr = MatGetBlockSize(A,&(shell->blk_size));CHKERRQ(ierr);
 	ierr = MatGetSize(A, &(shell->m), &(shell->n));CHKERRQ(ierr); // get matrix size  
+	shell->space = space; 
 
-	//ierr = MatConvert(A,MATSAME,MAT_INITIAL_MATRIX, &(shell->Dinv)); CHKERRQ(ierr);
 	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
-	//ierr = MatCreate(PETSC_COMM_SELF,&(shell->Dinv));
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 	shell->getLU(A);
 	ierr = VecCopy(u,shell->uvec);CHKERRQ(ierr);
@@ -640,8 +639,10 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 		PetscInt ierr = 0;
 		MatrixFreePreconditioner *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
+
 		//mc_lusgs(x,y);
-		Vec temp,nrm,ust, rst, blank, yst, yst1;
+		Vec temp,nrm,ust, rst, blank, yst, yst1, y3, y1,y2;
+
 		ierr = VecDuplicate(x,&temp);CHKERRQ(ierr);
 		ierr = VecDuplicate(x,&nrm);CHKERRQ(ierr);
 		ierr = VecDuplicate(x,&ust);CHKERRQ(ierr);
@@ -651,27 +652,38 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 		ierr = VecDuplicate(x,&yst);CHKERRQ(ierr);
 		ierr = VecDuplicate(x,&yst1);CHKERRQ(ierr);
 
+		ierr = VecDuplicate(x,&y1);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&y2);CHKERRQ(ierr);
+		ierr = VecDuplicate(x,&y3);CHKERRQ(ierr);
 
 		// matfree
 		PetscReal tol1 = 10;
 		PetscReal nrm2,nrm1, eps;
 		PetscInt vecsize;
-		ierr = VecCopy(x,yst);
+		ierr = VecCopy(x,yst); // initialize yst
+		ierr = VecNorm (shell->uvec,NORM_1,&nrm1);CHKERRQ(ierr);
+
+		//set up ith block dinv matrix
+		Mat Dinv_i;
+		ierr = MatCreate(PETSC_COMM_WORLD, &Dinv_i);CHKERRQ(ierr);
+		ierr = MatSetSizes(Dinv_i, PETSC_DECIDE, PETSC_DECIDE, shell->blk_size, shell->blk_size);
+
+		// vector to store vector sums
+		Vec sum;
+		ierr = VecCreate(PETSC_COMM_SELF, &sum);CHKERRQ(ierr);
+		ierr = VecSetSizes(sum, shell->blk_size, PETSC_DECIDE);CHKERRQ(ierr);
+		ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
+		ierr = VecAssemblyEnd(sum);CHKERRQ(ierr);
+
+
+		
+
 		while (tol1>1e-6)
 		{	
-			ierr =VecCopy(yst,yst1);CHKERRQ(ierr);
-
-			ierr = VecNorm (yst,NORM_2,&nrm2);CHKERRQ(ierr);
+			ierr = VecCopy(yst,yst1);CHKERRQ(ierr);
 			ierr = VecGetSize (yst,&vecsize);CHKERRQ(ierr);
-			ierr = VecNorm (shell->uvec,NORM_1,&nrm1);CHKERRQ(ierr);
-			eps = nrm1/(vecsize*nrm2);
-			eps = eps*(10^(-6))+10^(-6); // epsilon used in matrix-free finite diff
-			ierr = VecScale(y1,eps);CHKERRQ(ierr); // y1 = eps*y1
-			ierr = VecWAXPY(ust,1.0,yst,shell->uvec);CHKERRQ(ierr);
+			
 
-
-			const Spatial<freal,nvars> *const sp;
-			ierr = sp->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*y1)
 
 			// Looping over the elements
 
@@ -679,32 +691,44 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 			for (int i = 0; i < b; i++)
 			{
-				int p = i*blk_size;
-				Vec sum;
-				ierr = VecCreate(PETSC_COMM_SELF, &sum);CHKERRQ(ierr);
-				ierr = VecSetSizes(sum, shell->blk_size, PETSC_DECIDE);CHKERRQ(ierr);
+
+				
+				ierr = VecNorm (yst,NORM_2,&nrm2);CHKERRQ(ierr);
+				
+				eps = nrm1/(vecsize*nrm2);
+				eps = eps*(std::pow(10,-6))+std::pow(10,-6); // epsilon used in matrix-free finite diff
+				ierr = VecScale(yst,eps);CHKERRQ(ierr); // yst = eps*yst
+				ierr = VecWAXPY(ust,1.0,yst,shell->uvec);CHKERRQ(ierr);
+
+				
+				ierr = shell->space->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
+
+
+				int p = i*(shell->blk_size);
+				
+				
 				ierr = VecSet(sum,0);CHKERRQ(ierr);
-				ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
-				ierr = VecAssemblyEnd(sum);CHKERRQ(ierr);
+				
 
 				for (int j = 0; j < i; j++)
 				{					
-					const PetscInt idx[shell->blk_size];
-					for (int k = 0; k < blk_size; k++)
+					
+					PetscInt idx[shell->blk_size];
+					for (int k = 0; k < shell->blk_size; k++)
 					{
-						idx[k] = i*j+k; // figure out this loop
+						idx[k] = i*j+k; 
 					}
 					PetscScalar rsty[shell->blk_size], ry[shell->blk_size];
 
-					// get respective values of r(w+eps*z) and r(w) in he given block.
+					// get respective values of r(w_j+eps*z_j) and r(w_j) in he given block.
 					ierr = VecGetValues(shell->rvec,shell->blk_size,idx,ry);CHKERRQ(ierr);
 					ierr = VecGetValues(rst,shell->blk_size,idx,rsty);CHKERRQ(ierr);
 					
 					
-					for (int k = 0; k < blk_size; k++)
+					for (PetscInt k = 0; k < shell->blk_size; k++)
 					{	
-						const PetscScalar val = (rsty[k]-ry[k])/eps;
-						ierr = VecSetValues(sum,1,k,val,ADD_VALUES); CHKERRQ(ierr);
+						PetscScalar val = (rsty[k]-ry[k])/eps;
+						ierr = VecSetValue(sum,k,val,ADD_VALUES); CHKERRQ(ierr);
 					}
 					ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
 					ierr = VecAssemblyEnd(sum);CHKERRQ(ierr);
@@ -712,27 +736,59 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 				}
 
-				for (int k = 0; k < blk_size; k++)
-				{
-					idx[k] = p+k; // figure out this loop
-	
-				}
+
 				PetscScalar xget[shell->blk_size],sum_get;
-				ierr = VecGetValues(x,shell->blk_size,idx,xget);CHKERRQ(ierr);
+				ierr = VecGetValues(x,shell->blk_size,idx,xget);CHKERRQ(ierr); // see what is to be written instead pof idx here. 24/04/2024
 				
-				for (int k = 0; k < blk_size; k++)
+				for (PetscInt k = 0; k < shell->blk_size; k++)
 				{
-					ierr = VecGetValues(sum,1,1,sum_get);CHKERRQ(ierr);
+					ierr = VecGetValues(sum,1,k,sum_get);CHKERRQ(ierr);
 					val  = xget[k]-sum_get;
-					ierr = VecSetValues(temp,1,k,val,INSERT_VALUES); CHKERRQ(ierr);
+					ierr = VecSetValue(temp,k,val,INSERT_VALUES); CHKERRQ(ierr); 
 				}
-				
+				ierr = VecAssemblyBegin(temp);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(temp);CHKERRQ(ierr);
+
+
+				//  Dinv_{i block}*temp = yst_jblock here 
+				const PetscScalar va;
+				PetscInt row, col;
+				for (PetscInt k = 0; k < shell->blk_size; k++)
+				{
+					 row = i*(shell->blk_size)+k;
+					
+					for (PetscInt l = 0; l < shell->blk_size; l++)
+					{
+						 col = i*(shell->blk_size)+l;
+						
+						ierr = MatGetValue(shell->Dinv, row, col, &va); CHKERRQ(ierr); 
+						ierr = MatSetValue(Dinv_i,k,l,va,INSERT_VALUES); CHKERRQ(ierr); 
+
+					}
+					 idx[k] = row;
+				}
+				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
+				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+
+				ierr = MatMult(Dinv_i, temp, sum);CHKERRQ(ierr); //temporarily store the product in sum
+
+				// writing the final values to yst
+
+				for (PetscInt k = 0; k < shell->blk_size; k++)
+				{
+					ierr = VecGetValues(sum,1,&va);CHKERRQ(ierr);
+					row =  i*(shell->blk_size)+k;
+					ierr = VecSetValue(yst, row, va, INSERT_VALUES);CHKERRQ(ierr);
+				}
+				ierr = VecAssemblyBegin(yst);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(yst);CHKERRQ(ierr);
+
 				
 			}
 
 
 			// error tol to check convergence
-			ierr = VecWAXPY(nrm,-1.0,ys1,yst1);CHKERRQ(ierr);
+			ierr = VecWAXPY(nrm,-1.0,yst,yst1);CHKERRQ(ierr);
 			ierr =VecNorm(nrm,NORM_2,&tol1);CHKERRQ(ierr);
 			//std::cout<<tol1<<"tol1"<<std::endl;
 		}
@@ -761,6 +817,8 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 
 		}
+
+
 
 		PetscReal tol = 10;
 		ierr =VecCopy(y1,y);

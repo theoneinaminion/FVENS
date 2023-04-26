@@ -9,6 +9,7 @@
 #include "aconstants.hpp"
 #include "mesh/mesh.hpp"
 #include "spatial/aspatial.hpp"
+#include "physics/aphysics.hpp"
 
 #include <petscksp.h>
 
@@ -144,6 +145,7 @@ public:
 	Vec rvec; //residual vector
 	PetscInt blk_size; 
 	PetscInt m,n; //size of matrix
+	const Spatial<freal,nvars> *const space;
 	/**
 	 * @brief Get LU blocks from A and writes it to Lmat and Umat 
 	 * 
@@ -158,7 +160,7 @@ public:
 };
 
 	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell);
-	PetscErrorCode mf_pc_setup(PC pc, vec u, vec r);
+	PetscErrorCode mf_pc_setup(PC pc, Vec u, Vec r, const Spatial<freal,nvars> *const space);
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
 	PetscErrorCode mf_pc_destroy(PC pc);
 	PetscErrorCode mf_lusgs(Vec x, Vec y);

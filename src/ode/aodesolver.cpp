@@ -468,7 +468,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 			PCSetType(pc, PCSHELL);
 			mf_pc_create(&mfpc); // pass extra vectors etc here. 
-			mf_pc_setup(pc, uvec, rvec);
+			mf_pc_setup(pc, uvec, rvec, space);
 			ierr = PCShellSetApply(pc,&(mf_pc_apply));CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
 			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy)); CHKERRQ(ierr);
