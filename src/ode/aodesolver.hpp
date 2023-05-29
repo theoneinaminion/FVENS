@@ -11,6 +11,7 @@
 #include <petscksp.h>
 #include "spatial/aspatial.hpp"
 #include "nonlinearrelaxation.hpp"
+#include "linalg/alinalg.hpp"
 
 namespace fvens {
 

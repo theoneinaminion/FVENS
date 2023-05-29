@@ -451,6 +451,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 		// update residual and local time steps
 		ierr = space->compute_residual(uvec, rvec, true, dtmvec); CHKERRQ(ierr);
 
+		//MatrixFreePreconditioner<nvars> shell;
 		
 	if ABFLAG {
 		StatusCode ierr = 0;
@@ -461,19 +462,19 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 		PetscOptionsGetBool(NULL,NULL,"-user_defined_pc",&user_defined_pc,NULL);
 		if (user_defined_pc) 
 		{   
-			MatrixFreePreconditioner *mfpc;
+			MatrixFreePreconditioner<nvars> *shell;
 			//PetscViewer viewer;
 			//PetscCall(PetscViewerCreate(PETSC_COMM_WORLD,&viewer));
   			//PetscCall(PetscViewerSetType(viewer,PETSCVIEWERASCII));
 
 			PCSetType(pc, PCSHELL);
-			mf_pc_create(&mfpc); // pass extra vectors etc here. 
-			mf_pc_setup(pc, uvec, rvec, space);
-			ierr = PCShellSetApply(pc,&(mf_pc_apply));CHKERRQ(ierr);
-			ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
-			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy)); CHKERRQ(ierr);
+			mf_pc_create<nvars>(&shell); // pass extra vectors etc here. 
+			mf_pc_setup<nvars>(pc, uvec, rvec, space, shell);
+			ierr = PCShellSetApply(pc,&(mf_pc_apply<nvars>));CHKERRQ(ierr);
+			ierr = PCShellSetContext(pc,shell);CHKERRQ(ierr);
+			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy<nvars>)); CHKERRQ(ierr);
 			ierr = PCShellSetName(pc,"LUSGS matrix-occupied");CHKERRQ(ierr);
-			ierr = PCShellSetSetUp(pc,&(mf_pc_setup)); CHKERRQ(ierr); 
+			//ierr = PCShellSetSetUp(pc,&(mf_pc_setup<nvars>)); CHKERRQ(ierr); 
 			
 			//ierr = PCView(pc,viewer);CHKERRQ(ierr);
 			//mf_pc_setup(pc,solver.A);

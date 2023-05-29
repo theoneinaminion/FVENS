@@ -388,8 +388,8 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 // AB
 
 
-
-PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
+template<int nvars>
+PetscErrorCode MatrixFreePreconditioner<nvars>:: getLU(Mat A) {
 
 	StatusCode ierr = 0;
 	// MatCopy(A,Lmat,SAME_NONZERO_PATTERN);
@@ -495,7 +495,8 @@ PetscErrorCode MatrixFreePreconditioner:: getLU(Mat A) {
 
 
 
-PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
+template<int nvars>
+PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 	StatusCode ierr = 0;
 
 	// MatCopy(A,Lmat,SAME_NONZERO_PATTERN);
@@ -587,25 +588,30 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 	//template <int nvars>
 	//StatusCode MatrixFreePreconditioner::
-	PetscErrorCode mf_pc_create(MatrixFreePreconditioner **shell){
+	template<int nvars>
+	PetscErrorCode mf_pc_create(MatrixFreePreconditioner<nvars> **shell){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
-	MatrixFreePreconditioner *newctx;
+	MatrixFreePreconditioner<nvars> *newctx;
 	ierr = PetscNew(&newctx);CHKERRQ(ierr);
 
 	*shell = newctx;
 	return 0;
 	}
 	
-
+	template
+	PetscErrorCode mf_pc_create<NVARS>(MatrixFreePreconditioner<NVARS> **shell);
+	template
+	PetscErrorCode mf_pc_create<1>(MatrixFreePreconditioner<1> **shell);
 
 	// template <int nvars>
 	// StatusCode MatrixFreePreconditioner::
-	PetscErrorCode mf_pc_setup(PC pc, Vec u, Vec r,const Spatial<freal,nvars> *const space){
+	template<int nvars>
+	PetscErrorCode mf_pc_setup(PC pc, Vec u, Vec r,const Spatial<freal,nvars> *const space, MatrixFreePreconditioner<nvars> *shell){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
-	MatrixFreePreconditioner *shell;
-	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
+	//MatrixFreePreconditioner *shell;
+	ierr = PCShellGetContext(pc,shell);CHKERRQ(ierr);
 	Mat A;
 	ierr= PCGetOperators(pc,NULL,&A);
 	ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(shell->Dinv)); CHKERRQ(ierr);
@@ -631,13 +637,19 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 	return 0;
 
 	}
+
+	template
+	PetscErrorCode mf_pc_setup<NVARS>(PC pc, Vec u, Vec r,const Spatial<freal,NVARS> *const space, MatrixFreePreconditioner<NVARS> *shell);
+	template
+	PetscErrorCode mf_pc_setup<1>(PC pc, Vec u, Vec r,const Spatial<freal,1> *const space, MatrixFreePreconditioner<1> *shell);
 	//template <int nvars>
 	//StatusCode MatrixFreePreconditioner::
+	template<int nvars>
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y){
 	// Set up matrix free PC
 	// MatrixFreePreconditioner mfp;
 		PetscInt ierr = 0;
-		MatrixFreePreconditioner *shell;
+		MatrixFreePreconditioner<nvars> *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 
 		//mc_lusgs(x,y);
@@ -661,7 +673,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 		PetscReal nrm2,nrm1, eps;
 		PetscInt vecsize;
 		ierr = VecCopy(x,yst); // initialize yst
-		ierr = VecNorm (shell->uvec,NORM_1,&nrm1);CHKERRQ(ierr);
+		ierr = VecNorm(shell->uvec,NORM_1,&nrm1);CHKERRQ(ierr);
 
 		//set up ith block dinv matrix
 		Mat Dinv_i;
@@ -702,18 +714,16 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 				
 				ierr = shell->space->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
-
-
-				int p = i*(shell->blk_size);
 				
 				
 				ierr = VecSet(sum,0);CHKERRQ(ierr);
 				
-
+				PetscInt idx[shell->blk_size];
+				PetscScalar val;
 				for (int j = 0; j < i; j++)
 				{					
 					
-					PetscInt idx[shell->blk_size];
+					
 					for (int k = 0; k < shell->blk_size; k++)
 					{
 						idx[k] = i*j+k; 
@@ -727,7 +737,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 					
 					for (PetscInt k = 0; k < shell->blk_size; k++)
 					{	
-						PetscScalar val = (rsty[k]-ry[k])/eps;
+						val = (rsty[k]-ry[k])/eps;
 						ierr = VecSetValue(sum,k,val,ADD_VALUES); CHKERRQ(ierr);
 					}
 					ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
@@ -736,14 +746,16 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 				}
 
-
+				//PetscInt indx[shell->blk_size];
+					
 				PetscScalar xget[shell->blk_size],sum_get;
-				ierr = VecGetValues(x,shell->blk_size,idx,xget);CHKERRQ(ierr); // see what is to be written instead pof idx here. 24/04/2024
+				ierr = VecGetValues(x,shell->blk_size,idx,xget);CHKERRQ(ierr); // Changed idx to indx. Check if it is logically correct. 
 				
+
 				for (PetscInt k = 0; k < shell->blk_size; k++)
-				{
-					ierr = VecGetValues(sum,1,k,sum_get);CHKERRQ(ierr);
-					val  = xget[k]-sum_get;
+				{	
+					ierr = VecGetValues(sum,1,&k,&sum_get);CHKERRQ(ierr);
+					val = xget[k]-sum_get;
 					ierr = VecSetValue(temp,k,val,INSERT_VALUES); CHKERRQ(ierr); 
 				}
 				ierr = VecAssemblyBegin(temp);CHKERRQ(ierr);
@@ -751,7 +763,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 
 				//  Dinv_{i block}*temp = yst_jblock here 
-				const PetscScalar va;
+				PetscScalar va;
 				PetscInt row, col;
 				for (PetscInt k = 0; k < shell->blk_size; k++)
 				{
@@ -765,7 +777,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 						ierr = MatSetValue(Dinv_i,k,l,va,INSERT_VALUES); CHKERRQ(ierr); 
 
 					}
-					 idx[k] = row;
+					 idx[k] = row; // why am I storing idx? 2023-05-18
 				}
 				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
 				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
@@ -776,7 +788,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 				for (PetscInt k = 0; k < shell->blk_size; k++)
 				{
-					ierr = VecGetValues(sum,1,&va);CHKERRQ(ierr);
+					ierr = VecGetValues(sum,1,&k,&va);CHKERRQ(ierr);
 					row =  i*(shell->blk_size)+k;
 					ierr = VecSetValue(yst, row, va, INSERT_VALUES);CHKERRQ(ierr);
 				}
@@ -794,7 +806,7 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 		}
 
 		//int it = 0;
-		PetscReal tol1 = 10;
+		tol1 = 10;
 
 		while (tol1>1e-6)
 		{	
@@ -845,14 +857,20 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 
 	}
 
+	template
+	PetscErrorCode mf_pc_apply<NVARS>(PC pc, Vec x, Vec y);
+	template
+	PetscErrorCode mf_pc_apply<1>(PC pc, Vec x, Vec y);
+
 	//template <int nvars>
 	//StatusCode MatrixFreePreconditioner::
+	template<int nvars>
 	PetscErrorCode mf_pc_destroy(PC pc){
 	// Set up matrix free PC
 	StatusCode ierr = 0;
 	// Vec diag;
 
-	MatrixFreePreconditioner *shell;
+	MatrixFreePreconditioner<nvars> *shell;
 	ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 	ierr = MatDestroy(&shell->Lmat);CHKERRQ(ierr);
 	ierr = MatDestroy(&shell->Umat);CHKERRQ(ierr);
@@ -861,6 +879,11 @@ PetscErrorCode MatrixFreePreconditioner:: nbgetLU(Mat A) {
 	return 0;
 
 	}
+
+	template
+	PetscErrorCode mf_pc_destroy<NVARS>(PC pc);
+	template
+	PetscErrorCode mf_pc_destroy<1>(PC pc);
 
 }
 
