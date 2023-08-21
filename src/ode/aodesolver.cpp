@@ -453,6 +453,36 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 		//MatrixFreePreconditioner<nvars> shell;
 		
+
+
+		ierr = VecGhostUpdateBegin(rvec, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+		ierr = MatZeroEntries(M); CHKERRQ(ierr);
+		ierr = space->assemble_jacobian(uvec, M); CHKERRQ(ierr);
+
+
+		
+	
+
+		// curCFL = linearRamp(config.cflinit, config.cflfin,
+		//                     /*config.rampstart*/30, /*config.rampend*/100, step);
+		// (void)resiold;
+		curCFL = expResidualRamp(config.cflinit, config.cflfin, curCFL, resiold/resi, 0.25, 0.3);
+
+		// Add pseudo-time terms to diagonal blocks
+		// NOTE: After the following function call, dtm will contain Vol/(CFL*dt),
+		//   since this is required in case of matrix-free solvers.
+		ierr = addPseudoTimeTerm(curCFL, dtmvec, M); CHKERRQ(ierr);
+
+		ierr = VecGhostUpdateEnd(rvec, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+		ierr = MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+		ierr = MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+		/// Freezes the non-zero structure for efficiency in subsequent time steps.
+		ierr = MatSetOption(M, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE); CHKERRQ(ierr);
+
+    //user-defined preconditioner
 	if ABFLAG {
 		StatusCode ierr = 0;
 		PC pc;
@@ -484,42 +514,6 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 
 	}
-
-		ierr = VecGhostUpdateBegin(rvec, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-
-		ierr = MatZeroEntries(M); CHKERRQ(ierr);
-		ierr = space->assemble_jacobian(uvec, M); CHKERRQ(ierr);
-
-
-		
-		/*
-		Mat Lmat; 
-		Mat Umat; 
-		ierr = MatConvert(M,MATSAME,MAT_INITIAL_MATRIX, &Lmat);
-	 	ierr = MatConvert(M,MATSAME,MAT_INITIAL_MATRIX, &Umat);
-		ierr = MatZeroEntries(Lmat); CHKERRQ(ierr);
-		ierr = MatZeroEntries(Umat); CHKERRQ(ierr);
-		ierr = space->getLU(uvec, Lmat, Umat); CHKERRQ(ierr); */
-		
-
-		// curCFL = linearRamp(config.cflinit, config.cflfin,
-		//                     /*config.rampstart*/30, /*config.rampend*/100, step);
-		// (void)resiold;
-		curCFL = expResidualRamp(config.cflinit, config.cflfin, curCFL, resiold/resi, 0.25, 0.3);
-
-		// Add pseudo-time terms to diagonal blocks
-		// NOTE: After the following function call, dtm will contain Vol/(CFL*dt),
-		//   since this is required in case of matrix-free solvers.
-		ierr = addPseudoTimeTerm(curCFL, dtmvec, M); CHKERRQ(ierr);
-
-		ierr = VecGhostUpdateEnd(rvec, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-
-		ierr = MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-		ierr = MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-
-		/// Freezes the non-zero structure for efficiency in subsequent time steps.
-		ierr = MatSetOption(M, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE); CHKERRQ(ierr);
-
 
 		// setup and solve linear system for the update du
 	
