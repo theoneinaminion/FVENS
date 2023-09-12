@@ -187,9 +187,23 @@ template <typename scalar>
 void ConstGhostedVecHandler<scalar>::setVec(Vec x)
 {
 	if(!vec) {
+		//PetscBool isseq, ismpi;
+		int ierr;
 		vec = x;
-		int ierr = VecGhostGetLocalForm(vec, &localvec);
+		
+		// ierr = PetscObjectTypeCompare((PetscObject)vec, VECSEQ, &isseq);
+		// ierr = PetscObjectTypeCompare((PetscObject)vec, VECMPI, &ismpi);
+		// std::cout<<"seq:"<<isseq<<std::endl;
+		// std::cout<<"mpi:"<<ismpi<<std::endl;
+
+		ierr = VecGhostGetLocalForm(vec, &localvec);
 		petsc_throw(ierr, "Could not get local form!");
+		//std::cout<<"blah"<<std::endl;
+		if (!localvec) 
+	{
+		std::cout << "NULL vector localvec!" << std::endl;
+		//return -1;re*/z
+	}
 		ierr = VecGetArrayRead(localvec, &data);
 		petsc_throw(ierr, "Could not get local raw array!");
 		sdata = data;

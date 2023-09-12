@@ -654,25 +654,34 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y){
 	// Set up matrix free PC
 	// MatrixFreePreconditioner mfp;
+
+	
 		PetscInt ierr = 0;
+	
 		MatrixFreePreconditioner<nvars> *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 
 		//mc_lusgs(x,y);
 		Vec temp,nrm,ust, rst, blank, yst, yst1, y3, y1,y2;
 
-		ierr = VecDuplicate(x,&temp);CHKERRQ(ierr);
-		ierr = VecDuplicate(x,&nrm);CHKERRQ(ierr);
-		ierr = VecDuplicate(x,&ust);CHKERRQ(ierr);
-		ierr = VecDuplicate(x,&rst);CHKERRQ(ierr);
-		ierr = VecDuplicate(x,&blank);CHKERRQ(ierr);
+		PetscInt locnelem;
+	ierr = VecGetSize(x, &locnelem); CHKERRQ(ierr);
+	std::cout<<locnelem<<std::endl;
+	ierr = VecGetSize(shell->uvec, &locnelem); CHKERRQ(ierr);
+	std::cout<<locnelem<<std::endl;
+		
+		
+		ierr = VecDuplicate(shell->uvec,&nrm);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&ust);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&rst);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&blank);CHKERRQ(ierr);
 
-		ierr = VecDuplicate(x,&yst);CHKERRQ(ierr);
-		ierr = VecDuplicate(x,&yst1);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&yst);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&yst1);CHKERRQ(ierr);
 
-		ierr = VecDuplicate(x,&y1);CHKERRQ(ierr);
-		ierr = VecDuplicate(x,&y2);CHKERRQ(ierr);
-		ierr = VecDuplicate(x,&y3);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&y1);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&y2);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&y3);CHKERRQ(ierr);
 		ierr = VecSet(blank,0);CHKERRQ(ierr);
 
 
@@ -682,36 +691,41 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 		PetscInt vecsize;
 		ierr = VecCopy(x,yst); // initialize yst
 		ierr = VecNorm(shell->uvec,NORM_1,&nrm1);CHKERRQ(ierr);
-
 		//set up ith block dinv matrix
-		Mat Dinv_i;
-		ierr = MatCreate(PETSC_COMM_WORLD, &Dinv_i);CHKERRQ(ierr);
-		ierr = MatSetSizes(Dinv_i, PETSC_DECIDE, PETSC_DECIDE, shell->blk_size, shell->blk_size);
+		Mat Dinv_i;  //MatType type;
+		ierr = MatCreateSeqAIJ(PETSC_COMM_WORLD, shell->blk_size, shell->blk_size, 0, NULL, &Dinv_i);CHKERRQ(ierr);
+		ierr = MatSetOption(Dinv_i, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);CHKERRQ(ierr);
+		// ierr = MatCreate(PETSC_COMM_WORLD, &Dinv_i);CHKERRQ(ierr);
+		// ierr = MatGetType(shell->Dinv, &type);CHKERRQ(ierr);
+		// ierr = MatSetType(Dinv_i, type);CHKERRQ(ierr);
+		// ierr = MatSetSizes(Dinv_i, PETSC_DECIDE, PETSC_DECIDE, shell->blk_size, shell->blk_size);
+
 
 		// vector to store vector sums
 		Vec sum;
 		ierr = VecCreate(PETSC_COMM_SELF, &sum);CHKERRQ(ierr);
+		ierr = VecSetType(sum, VECMPI);CHKERRQ(ierr);
 		ierr = VecSetSizes(sum, shell->blk_size, PETSC_DECIDE);CHKERRQ(ierr);
+		ierr = VecDuplicate(sum,&temp);CHKERRQ(ierr);
 		
-
-
+	
 		int maxiter = 10;
 		int iter = 0;
 
 		while (tol1>1e-6 || iter>=maxiter)
 		{	
 			iter = iter+1;
+			std::cout<<iter<<std::endl;
 			
 			ierr = VecCopy(yst,yst1);CHKERRQ(ierr);
 			ierr = VecGetSize (yst,&vecsize);CHKERRQ(ierr);
 			
-			
-		
+				
 
 			// Looping over the elements
 
 			PetscInt b = (shell->n)/(shell->blk_size);
-
+			std::cout<<b<<std::endl;
 			for (int i = 0; i < b; i++)
 			{
 
@@ -722,21 +736,25 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 				eps = eps*(std::pow(10,-6))+std::pow(10,-6); // epsilon used in matrix-free finite diff
 				ierr = VecScale(yst,eps);CHKERRQ(ierr); // yst = eps*yst
 				ierr = VecWAXPY(ust,1.0,yst,shell->uvec);CHKERRQ(ierr);
-				ierr = shell->space->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
-								std::cout<<iter<<std::endl;
-
 				
+				ierr = shell->space->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
+								//std::cout<<iter<<std::endl;
+				
+				//ierr = shell->space->compute_residual(shell->rvec, x, false, x); CHKERRQ(ierr); // r(u+eps*yst)
+								
+				std::cout<<"double yo"<<std::endl;
 				ierr = VecSet(sum,0);CHKERRQ(ierr);
 				
 				PetscInt idx[shell->blk_size];
 				PetscScalar val;
-				for (int j = 0; j < i; j++)
+				for (int j = 0; j <= i; j++)
 				{					
 					
 					
 					for (int k = 0; k < shell->blk_size; k++)
 					{
 						idx[k] = i*j+k; 
+						//std::cout<<idx[k]<<std::endl;
 					}
 					PetscScalar rsty[shell->blk_size], ry[shell->blk_size];
 
@@ -785,8 +803,11 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 						
 						ierr = MatGetValue(shell->Dinv, row, col, &va); CHKERRQ(ierr); 
 						ierr = MatSetValue(Dinv_i,k,l,va,INSERT_VALUES); CHKERRQ(ierr); 
+						std::cout<<row<<col<<std::endl;
 
 					}
+					
+					
 					 idx[k] = row; // why am I storing idx? 2023-05-18
 				}
 				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
@@ -812,7 +833,7 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 			// error tol to check convergence
 			ierr = VecWAXPY(nrm,-1.0,yst,yst1);CHKERRQ(ierr);
 			ierr =VecNorm(nrm,NORM_2,&tol1);CHKERRQ(ierr);
-			//std::cout<<tol1<<"tol1"<<std::endl;
+			std::cout<<tol1<<"tol1"<<std::endl;
 		}
 
 		//int it = 0;

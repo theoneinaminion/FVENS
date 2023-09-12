@@ -632,21 +632,28 @@ FlowFV<scalar,secondOrderRequested,constVisc>::compute_residual(const Vec uvec,
                                                                 const bool gettimesteps,
                                                                 Vec timesteps) const
 {
+	
 	StatusCode ierr = 0;
 	//const int mpirank = get_mpi_rank(PETSC_COMM_WORLD);
-
+	
 	PetscInt locnelem;
 	ierr = VecGetLocalSize(uvec, &locnelem); CHKERRQ(ierr);
 	assert(locnelem % NVARS == 0);
 	locnelem /= NVARS;
 	assert(locnelem == m->gnelem());
 
+	
+
 	const ConstGhostedVecHandler<scalar> uvh(uvec);
+	
 	const scalar *const uarr = uvh.getArray();
 	Eigen::Map<const MVector<scalar>> u(uarr, m->gnelem()+m->gnConnFace(), NVARS);
 
+	
+
 	{
 		amat::Array2dMutableView<scalar> uleft(uface.getLocalArrayLeft(), m->gnaface(),NVARS);
+		
 		// first, set cell-centered values of boundary cells as left-side values of boundary faces
 #pragma omp parallel for default(shared)
 		for(fint ied = m->gPhyBFaceStart(); ied < m->gPhyBFaceEnd(); ied++)
@@ -661,7 +668,7 @@ FlowFV<scalar,secondOrderRequested,constVisc>::compute_residual(const Vec uvec,
 	scalar *ubcell = nullptr;
 	if(m->gnbface() > 0)
 		ubcell = new scalar[m->gnbface()*NVARS];
-
+				
 	if(secondOrderRequested)
 	{
 		amat::Array2dMutableView<scalar> uleft(uface.getLocalArrayLeft(), m->gnaface(),NVARS);
@@ -699,14 +706,19 @@ FlowFV<scalar,secondOrderRequested,constVisc>::compute_residual(const Vec uvec,
 			gradcomp->compute_gradients(upa, ug, gradh.getArray());
 		}
 
+	
 		// In case of WENO reconstruction, we need gradients at conn ghost cells immediately
+		
 		if(nconfig.reconstruction == "WENO")
 		{
 			ierr = VecGhostUpdateBegin(gradvec, INSERT_VALUES, SCATTER_FORWARD);
 			CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(gradvec, INSERT_VALUES, SCATTER_FORWARD);
 			CHKERRQ(ierr);
+
 		}
+
+	
 
 		// reconstruct
 		{
@@ -714,11 +726,16 @@ FlowFV<scalar,secondOrderRequested,constVisc>::compute_residual(const Vec uvec,
 			lim->compute_face_values(up, ug, gradh.getArray(), uleft, uright);
 		}
 
+		
+	
 		if(nconfig.reconstruction != "WENO")
 		{
 			ierr = VecGhostUpdateBegin(gradvec, INSERT_VALUES, SCATTER_FORWARD);
 			CHKERRQ(ierr);
+						
+
 		}
+			
 
 		// Convert face values back to conserved variables - gradients stay primitive.
 #pragma omp parallel for default(shared)
@@ -729,14 +746,19 @@ FlowFV<scalar,secondOrderRequested,constVisc>::compute_residual(const Vec uvec,
 
 		uface.updateSharedFacesBegin();
 
+
+
 #pragma omp parallel default(shared)
 		{
 #pragma omp for
 			for(fint iface = m->gSubDomFaceStart(); iface < m->gSubDomFaceEnd(); iface++)
 			{
+				
 				physics.getConservedFromPrimitive(&uleft(iface,0), &uleft(iface,0));
 				physics.getConservedFromPrimitive(&uright(iface,0), &uright(iface,0));
+				
 			}
+	
 #pragma omp for
 			for(fint iface = m->gPhyBFaceStart(); iface < m->gPhyBFaceEnd(); iface++)
 			{
@@ -745,6 +767,7 @@ FlowFV<scalar,secondOrderRequested,constVisc>::compute_residual(const Vec uvec,
 			}
 		}
 	}
+	
 	else
 	{
 		// if order is 1, set the face data same as cell-centred data for all faces
@@ -769,6 +792,7 @@ FlowFV<scalar,secondOrderRequested,constVisc>::compute_residual(const Vec uvec,
 	compute_boundary_states(uface.getLocalArrayLeft()+m->gPhyBFaceStart()*NVARS,
 	                        uface.getLocalArrayRight()+m->gPhyBFaceStart()*NVARS);
 
+	
 	if(secondOrderRequested)
 	{
 		uface.updateSharedFacesEnd();
