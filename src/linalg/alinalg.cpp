@@ -725,7 +725,9 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 			// Looping over the elements
 
 			PetscInt b = (shell->n)/(shell->blk_size);
-			std::cout<<b<<std::endl;
+			//PetscInt size;
+			// ierr = VecGetLocalSize(shell->rvec, &size); CHKERRQ(ierr);
+			 //std::cout<<nvars<<std::endl;
 			for (int i = 0; i < b; i++)
 			{
 
@@ -742,18 +744,18 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 				
 				//ierr = shell->space->compute_residual(shell->rvec, x, false, x); CHKERRQ(ierr); // r(u+eps*yst)
 								
-				std::cout<<"double yo"<<std::endl;
+				
 				ierr = VecSet(sum,0);CHKERRQ(ierr);
 				
 				PetscInt idx[shell->blk_size];
 				PetscScalar val;
 				for (int j = 0; j <= i; j++)
 				{					
-					
+					//std::cout<<i<<"--"<<j<<std::endl;
 					
 					for (int k = 0; k < shell->blk_size; k++)
 					{
-						idx[k] = i*j+k; 
+						idx[k] = nvars*j+k; 
 						//std::cout<<idx[k]<<std::endl;
 					}
 					PetscScalar rsty[shell->blk_size], ry[shell->blk_size];
@@ -803,7 +805,7 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 						
 						ierr = MatGetValue(shell->Dinv, row, col, &va); CHKERRQ(ierr); 
 						ierr = MatSetValue(Dinv_i,k,l,va,INSERT_VALUES); CHKERRQ(ierr); 
-						std::cout<<row<<col<<std::endl;
+						//std::cout<<"--"<<row<<col<<std::endl;
 
 					}
 					
@@ -836,6 +838,7 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 			std::cout<<tol1<<"tol1"<<std::endl;
 		}
 
+		return -1;
 		//int it = 0;
 		tol1 = 10;
 
