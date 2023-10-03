@@ -662,13 +662,13 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 
 		//mc_lusgs(x,y);
-		Vec temp,nrm,ust, rst, blank, yst, yst1, y3, y1,y2;
+		Vec temp,nrm,ust, rst, blank, yst, yst1,yst2;
 
-		PetscInt locnelem;
-	ierr = VecGetSize(x, &locnelem); CHKERRQ(ierr);
-	std::cout<<locnelem<<std::endl;
-	ierr = VecGetSize(shell->uvec, &locnelem); CHKERRQ(ierr);
-	std::cout<<locnelem<<std::endl;
+	// 	PetscInt locnelem;
+	// ierr = VecGetSize(x, &locnelem); CHKERRQ(ierr);
+	// std::cout<<locnelem<<std::endl;
+	// ierr = VecGetSize(shell->uvec, &locnelem); CHKERRQ(ierr);
+	// std::cout<<locnelem<<std::endl;
 		
 		
 		ierr = VecDuplicate(shell->uvec,&nrm);CHKERRQ(ierr);
@@ -678,10 +678,10 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 
 		ierr = VecDuplicate(shell->uvec,&yst);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&yst1);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&yst2);CHKERRQ(ierr);
 
-		ierr = VecDuplicate(shell->uvec,&y1);CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->uvec,&y2);CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->uvec,&y3);CHKERRQ(ierr);
+
+	
 		ierr = VecSet(blank,0);CHKERRQ(ierr);
 
 
@@ -708,7 +708,8 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 		ierr = VecSetSizes(sum, shell->blk_size, PETSC_DECIDE);CHKERRQ(ierr);
 		ierr = VecDuplicate(sum,&temp);CHKERRQ(ierr);
 		
-	
+		PetscInt b = (shell->n)/(shell->blk_size);
+
 		int maxiter = 10;
 		int iter = 0;
 
@@ -717,14 +718,12 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 			iter = iter+1;
 			std::cout<<iter<<std::endl;
 			
-			ierr = VecCopy(yst,yst1);CHKERRQ(ierr);
 			ierr = VecGetSize (yst,&vecsize);CHKERRQ(ierr);
 			
 				
 
 			// Looping over the elements
 
-			PetscInt b = (shell->n)/(shell->blk_size);
 			//PetscInt size;
 			// ierr = VecGetLocalSize(shell->rvec, &size); CHKERRQ(ierr);
 			 //std::cout<<nvars<<std::endl;
@@ -834,60 +833,117 @@ PetscErrorCode MatrixFreePreconditioner<nvars>:: nbgetLU(Mat A) {
 
 			// error tol to check convergence
 			ierr = VecWAXPY(nrm,-1.0,yst,yst1);CHKERRQ(ierr);
+
 			ierr =VecNorm(nrm,NORM_2,&tol1);CHKERRQ(ierr);
 			std::cout<<tol1<<"tol1"<<std::endl;
+			ierr = VecCopy(yst,yst1);CHKERRQ(ierr);
+
 		}
 
-		return -1;
 		//int it = 0;
 		tol1 = 10;
 
-		while (tol1>1e-6)
+		// U loop
+		while (tol1>1e-6 || iter>=maxiter)
 		{	
-			ierr =VecCopy(y1,y2);CHKERRQ(ierr);
+			iter = iter+1;
+			std::cout<<iter<<std::endl;
+			
+			ierr = VecGetSize (yst,&vecsize);CHKERRQ(ierr);
+			
+				
 
-			// y1 = Dinv(x-Lmat*y1);
-			MatMult(shell->Lmat,y1,temp); //temp = Lmat*y1
+			// Looping over the elements
+			for (int i = 0; i < b; i++)
+			{
+			
+				ierr = VecNorm (yst1,NORM_2,&nrm2);CHKERRQ(ierr);
+				
+				eps = nrm1/(vecsize*nrm2);
+				eps = eps*(std::pow(10,-6))+std::pow(10,-6); // epsilon used in matrix-free finite diff
+				ierr = VecScale(yst1,eps);CHKERRQ(ierr); // yst = eps*yst
+				ierr = VecWAXPY(ust,1.0,yst1,shell->uvec);CHKERRQ(ierr);
+				
+				ierr = shell->space->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
+
+				// Approximating U*vec
+				PetscInt idx[shell->blk_size];
+				PetscScalar val;
+				for (int j = b; j >= i; j--)
+				{
+					for (int k = 0; k < shell->blk_size; k++)
+					{
+						idx[k] = nvars*j+k; 
+						//std::cout<<idx[k]<<std::endl;
+					}
+					PetscScalar rsty[shell->blk_size], ry[shell->blk_size];
+
+					// get respective values of r(w_j+eps*z_j) and r(w_j) in he given block.
+					ierr = VecGetValues(shell->rvec,shell->blk_size,idx,ry);CHKERRQ(ierr);
+					ierr = VecGetValues(rst,shell->blk_size,idx,rsty);CHKERRQ(ierr);
+					
+					
+					for (PetscInt k = 0; k < shell->blk_size; k++)
+					{	
+						val = (rsty[k]-ry[k])/eps;
+						ierr = VecSetValue(sum,k,val,ADD_VALUES); CHKERRQ(ierr);
+					}
+					ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
+					ierr = VecAssemblyEnd(sum);CHKERRQ(ierr);
+				}
 
 
-			ierr =VecAYPX(temp,-1.0,x);CHKERRQ(ierr);//temp = x-Lmat*y1
-			ierr =MatMult(shell->Dinv,temp,y1);CHKERRQ(ierr); //Dinv(x-Lmat*y1)
-			//VecPointwiseMult(y1,x,shell->diag);
+				//  Dinv_{i block}*temp = yst1_jblock here 
+				PetscScalar va;
+				PetscInt row, col;
+				for (PetscInt k = 0; k < shell->blk_size; k++)
+				{
+					 row = i*(shell->blk_size)+k;
+					
+					for (PetscInt l = 0; l < shell->blk_size; l++)
+					{
+						 col = i*(shell->blk_size)+l;
+						
+						ierr = MatGetValue(shell->Dinv, row, col, &va); CHKERRQ(ierr); 
+						ierr = MatSetValue(Dinv_i,k,l,va,INSERT_VALUES); CHKERRQ(ierr); 
+						//std::cout<<"--"<<row<<col<<std::endl;
 
-			// error tol to check convergence
-			ierr = VecWAXPY(nrm,-1.0,y1,y2);CHKERRQ(ierr);
+					}
+					
+					
+					 idx[k] = row; // why am I storing idx? 2023-05-18
+				}
+				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
+				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+
+				ierr = MatMult(Dinv_i, sum, temp);CHKERRQ(ierr); //temporarily store the product in sum
+				
+				// Writing the final values to yst1
+				PetscScalar va1;
+				for (PetscInt k = 0; k < shell->blk_size; k++)
+				{
+					row =  i*(shell->blk_size)+k;
+					ierr = VecGetValues(temp,1,&k,&va);CHKERRQ(ierr);
+					ierr = VecGetValues(yst,1,&row,&va1);CHKERRQ(ierr);
+					va = va1 - va;
+					ierr = VecSetValue(yst1, row, va, INSERT_VALUES);CHKERRQ(ierr);
+				}
+				ierr = VecAssemblyBegin(yst1);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(yst1);CHKERRQ(ierr);
+
+
+			}
+
+			
+			ierr = VecWAXPY(nrm,-1.0,yst,yst1);CHKERRQ(ierr);
 			ierr =VecNorm(nrm,NORM_2,&tol1);CHKERRQ(ierr);
-			//std::cout<<tol1<<"tol1"<<std::endl;
-
-			
-
+			std::cout<<tol1<<"tol1"<<std::endl;
+			ierr = VecCopy(yst1,yst2);CHKERRQ(ierr);
 
 		}
 
-
-
-		PetscReal tol = 10;
-		ierr =VecCopy(y1,y);
-		while (tol>1e-6)
-		{
-			ierr =VecCopy(y,y3);CHKERRQ(ierr);
-
-			//y = y1 - Dinv * Umat * y
-			ierr =MatMult(shell->Umat,y,temp);CHKERRQ(ierr); // temp = Umat * y
-			//VecPointwiseMult(y,x,shell->diag);
-			ierr =MatMult(shell->Dinv,temp,y);CHKERRQ(ierr); //y = Dinv * Umat * y
-			ierr =VecAYPX(y,-1.0,y1);CHKERRQ(ierr); //y = y1 - Dinv * Umat * y
-
-			// Residual to compute tolerance
-			ierr = VecWAXPY(nrm,-1.0,y,y3);CHKERRQ(ierr);
-			ierr =VecNorm(nrm,NORM_2,&tol);CHKERRQ(ierr);
-			
-			//Storing the old vectors
-			
-			//std::cout<<tol<<"tol"<<std::endl;
-		}
+		y=yst1;
 		return 0;
-		
 
 	}
 
