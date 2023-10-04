@@ -156,6 +156,15 @@ public:
 	PetscErrorCode getLU(Mat A); 
 	PetscErrorCode nbgetLU(Mat A); 
 
+	/**
+	 * @brief epsioln to do the operation residual(x+epsilon*y)
+	 * 
+	 * @param x input 
+	 * @param y input 
+	 * @return float 
+	 */
+	double epsilon_calc(Vec x, Vec y); 
+
 
 };
 	template<int nvars>
@@ -171,7 +180,7 @@ public:
 	PetscErrorCode mc_lusgs(Vec x, Vec y);
 	
 	//StatusCode get_diagblk_inv (const Vec uvec, Mat A);
-
+	
 
 
 
