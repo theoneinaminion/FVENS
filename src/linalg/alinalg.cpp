@@ -730,6 +730,9 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		ierr = VecDuplicate(sum,&y_i);CHKERRQ(ierr);
 		
 		PetscInt b = (shell->n)/(shell->blk_size);
+		// std::cout<<"b"<<b<<std::endl;
+		// std::cout<<"n"<<shell->n<<std::endl;
+		// std::cout<<"blk_size"<<shell->blk_size<<std::endl;
 
 		int maxiter = 10;
 		int iter = 0;
@@ -739,7 +742,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 			ierr = VecCopy(y,yst1);CHKERRQ(ierr); // Saving the value from prev iteration
 			iter = iter+1;
-			std::cout<<iter<<std::endl;
+			std::cout<<"iter"<<iter<<std::endl;
 			
 			ierr = VecGetSize (yst,&vecsize);CHKERRQ(ierr);
 			//std::cout<<vecsize<<std::endl;
@@ -757,13 +760,13 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				eps = shell->epsilon_calc(shell->uvec, yst);
 				ierr = VecWAXPY(ust,eps,yst,shell->uvec);CHKERRQ(ierr); // ust = eps*yst + shell->uvec
 				ierr = shell->space->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
-								//std::cout<<iter<<std::endl;
+				//std::cout<<eps<<std::endl;
 
 
 				eps  =  shell->epsilon_calc(shell->uvec, y);
 				ierr = VecWAXPY(u,eps,y,shell->uvec);CHKERRQ(ierr); // ust = eps*yst + shell->uvec
 				ierr = shell->space->compute_residual(u, r, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
-				//ierr = shell->space->compute_residual(shell->rvec, x, false, x); CHKERRQ(ierr); // r(u+eps*yst)
+				//std::cout<<eps<<std::endl;
 								
 				
 				ierr = VecSet(sum,0);CHKERRQ(ierr);
@@ -891,7 +894,13 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				ierr = VecAssemblyBegin(y);CHKERRQ(ierr);
 				ierr = VecAssemblyEnd(y);CHKERRQ(ierr); 
 
-				std::cout<<i<<std::endl;
+				// if (i==(b-1))
+				// {
+				// 	int fs = 1;
+				// 	std::cout<<fs<< "i loop"<<std::endl;
+				// 	fs = fs+1;
+				// }
+			
 				
 			}
 
