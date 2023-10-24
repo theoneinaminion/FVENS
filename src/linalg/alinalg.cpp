@@ -597,7 +597,9 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				
 		eps = nrm1/(vecsize*nrm2);
 		eps = eps*(std::pow(10,-6))+std::pow(10,-6); // epsilon used in matrix-free finite diff
-		return eps;
+		
+		double pertmag = (1e-7)/nrm1;
+		return pertmag;
 
 }
 
@@ -761,13 +763,15 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				ierr = VecWAXPY(ust,eps,yst,shell->uvec);CHKERRQ(ierr); // ust = eps*yst + shell->uvec
 				ierr = shell->space->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
 				//std::cout<<eps<<std::endl;
-
+				ierr = VecAssemblyBegin(rst);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(rst);CHKERRQ(ierr);
 
 				eps  =  shell->epsilon_calc(shell->uvec, y);
 				ierr = VecWAXPY(u,eps,y,shell->uvec);CHKERRQ(ierr); // ust = eps*yst + shell->uvec
 				ierr = shell->space->compute_residual(u, r, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
 				//std::cout<<eps<<std::endl;
-								
+				ierr = VecAssemblyBegin(r);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(r);CHKERRQ(ierr);				
 				
 				ierr = VecSet(sum,0);CHKERRQ(ierr);
 								
@@ -913,114 +917,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			std::cout<<tol1<<"tol1"<<std::endl;
 
 		}
-
-		
-		
-		/*
-		//int it = 0;
-		tol1 = 10;
-
-		// U loop
-		while (tol1>1e-6 || iter>=maxiter)
-		{	
-			iter = iter+1;
-			std::cout<<iter<<std::endl;
-			
-			ierr = VecGetSize (yst,&vecsize);CHKERRQ(ierr);
-			
-				
-
-			// Looping over the elements
-			for (int i = 0; i < b; i++)
-			{
-			
-				ierr = VecNorm (yst1,NORM_2,&nrm2);CHKERRQ(ierr);
-				
-				eps = nrm1/(vecsize*nrm2);
-				eps = eps*(std::pow(10,-6))+std::pow(10,-6); // epsilon used in matrix-free finite diff
-				ierr = VecScale(yst1,eps);CHKERRQ(ierr); // yst = eps*yst
-				ierr = VecWAXPY(ust,1.0,yst1,shell->uvec);CHKERRQ(ierr);
-				
-				ierr = shell->space->compute_residual(ust, rst, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
-
-				// Approximating U*vec
-				PetscInt idx[shell->blk_size];
-				PetscScalar val;
-				for (int j = b; j >= i; j--)
-				{
-					for (int k = 0; k < shell->blk_size; k++)
-					{
-						idx[k] = nvars*j+k; 
-						std::cout<<nvars<<"NVARS"<<std::endl;
-					}
-					PetscScalar rsty[shell->blk_size], ry[shell->blk_size];
-
-					// get respective values of r(w_j+eps*z_j) and r(w_j) in he given block.
-					ierr = VecGetValues(shell->rvec,shell->blk_size,idx,ry);CHKERRQ(ierr);
-					ierr = VecGetValues(rst,shell->blk_size,idx,rsty);CHKERRQ(ierr);
-					
-					
-					for (PetscInt k = 0; k < shell->blk_size; k++)
-					{	
-						val = (rsty[k]-ry[k])/eps;
-						ierr = VecSetValue(sum,k,val,ADD_VALUES); CHKERRQ(ierr);
-					}
-					ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
-					ierr = VecAssemblyEnd(sum);CHKERRQ(ierr);
-				}
-
-
-				//  Dinv_{i block}*temp = yst1_jblock here 
-				PetscScalar va;
-				PetscInt row, col;
-				for (PetscInt k = 0; k < shell->blk_size; k++)
-				{
-					 row = i*(shell->blk_size)+k;
-					
-					for (PetscInt l = 0; l < shell->blk_size; l++)
-					{
-						 col = i*(shell->blk_size)+l;
-						
-						ierr = MatGetValue(shell->Dinv, row, col, &va); CHKERRQ(ierr); 
-						ierr = MatSetValue(Dinv_i,k,l,va,INSERT_VALUES); CHKERRQ(ierr); 
-						//std::cout<<"--"<<row<<col<<std::endl;
-
-					}
-					
-					
-					 idx[k] = row; // why am I storing idx? 2023-05-18
-				}
-				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
-				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-
-				ierr = MatMult(Dinv_i, sum, temp);CHKERRQ(ierr); //temporarily store the product in sum
-				
-				// Writing the final values to yst1
-				PetscScalar va1;
-				for (PetscInt k = 0; k < shell->blk_size; k++)
-				{
-					row =  i*(shell->blk_size)+k;
-					ierr = VecGetValues(temp,1,&k,&va);CHKERRQ(ierr);
-					ierr = VecGetValues(yst,1,&row,&va1);CHKERRQ(ierr);
-					va = va1 - va;
-					ierr = VecSetValue(yst1, row, va, INSERT_VALUES);CHKERRQ(ierr);
-				}
-				ierr = VecAssemblyBegin(yst1);CHKERRQ(ierr);
-				ierr = VecAssemblyEnd(yst1);CHKERRQ(ierr);
-
-
-			}
-
-			
-			ierr = VecWAXPY(nrm,-1.0,yst,yst1);CHKERRQ(ierr);
-			ierr =VecNorm(nrm,NORM_2,&tol1);CHKERRQ(ierr);
-			std::cout<<tol1<<"tol1"<<std::endl;
-			ierr = VecCopy(yst1,yst2);CHKERRQ(ierr);
-
-		}
-
-		y=yst1; */
-		return 0;
+		return ierr;
 
 	}
 
@@ -1028,6 +925,111 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	PetscErrorCode mf_pc_apply<NVARS>(PC pc, Vec x, Vec y);
 	template
 	PetscErrorCode mf_pc_apply<1>(PC pc, Vec x, Vec y);
+
+
+
+	
+	# if 0
+	template<int nvars>
+	PetscErrorCode mf_pc_apply1(PC pc,const Vec x, Vec y)
+	{
+		StatusCode ierr = 0;
+		MatrixFreePreconditioner<nvars> *shell;
+		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
+		Vec dummy = NULL;
+
+		if(!(shell->space))
+			SETERRQ(PETSC_COMM_SELF, PETSC_ERR_POINTER,
+					"Spatial context not set!");
+
+		const UMesh<freal,NDIM> *const m = shell->space->mesh();
+		//ierr = VecSet(y, 0.0); CHKERRQ(ierr);
+
+		Vec aux, yg;
+		ierr = VecDuplicate(shell->uvec, &aux); CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->rvec, &yg); CHKERRQ(ierr);
+
+		PetscScalar xnorm = 0;
+		ierr = VecNorm(x, NORM_2, &xnorm); CHKERRQ(ierr);
+
+	#ifdef DEBUG
+		if(xnorm < 10.0*std::numeric_limits<freal>::epsilon())
+			SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FP,
+					"Norm of offset is too small for finite difference Jacobian!");
+	#endif
+		const freal eps = 1e-7;
+		const freal pertmag = eps/xnorm;
+
+		// aux <- u + eps/xnorm * x ;    y <- 0
+		{
+			ConstVecHandler<PetscScalar> uh(shell->uvec);
+			const PetscScalar *const ur = uh.getArray();
+			ConstVecHandler<PetscScalar> xh(x);
+			const PetscScalar *const xr = xh.getArray();
+			MutableVecHandler<PetscScalar> auxh(aux);
+			PetscScalar *const auxr = auxh.getArray(); 
+			MutableVecHandler<PetscScalar> ygh(yg);
+			PetscScalar *const ygr = ygh.getArray(); 
+
+	#pragma omp parallel for simd default(shared)
+			for(fint i = 0; i < m->gnelem()*nvars; i++) {
+				ygr[i] = 0;
+				auxr[i] = ur[i] + pertmag * xr[i];
+			}
+
+	#pragma omp parallel for simd default(shared)
+			for(fint i = m->gnelem(); i < m->gnelem()+m->gnConnFace(); i++) {
+				ygr[i] = 0;
+			}
+		}
+
+		ierr = VecGhostUpdateBegin(aux, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(aux, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+
+		// y <- -r(u + eps/xnorm * x)
+		ierr = shell->space->compute_residual(aux, yg, false, dummy); CHKERRQ(ierr);
+
+		ierr = VecGhostUpdateBegin(yg, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(yg, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+		// y <- vol/dt x + (-(-r(u + eps/xnorm * x)) + (-r(u))) / eps |x|
+		//    = vol/dt x + (r(u + eps/xnorm * x) - r(u)) / eps |x|
+		/* We need to divide the difference by the step length scaled by the norm of x.
+		* We do NOT divide by epsilon, because we want the product of the Jacobian and x, which is
+		* the directional derivative (in the direction of x) multiplied by the norm of x.
+		*/
+		{
+			ConstVecHandler<PetscScalar> xh(x);
+			const PetscScalar *const xr = xh.getArray();
+			ConstVecHandler<PetscScalar> resh(shell->rvec);
+			const PetscScalar *const resr = resh.getArray();
+			ConstVecHandler<PetscScalar> ygh(yg);
+			const PetscScalar *const ygr = ygh.getArray();
+			MutableVecHandler<PetscScalar> yh(y);
+			PetscScalar *const yr = yh.getArray(); 
+
+	#pragma omp parallel for simd default(shared)
+			for(fint iel = 0; iel < m->gnelem(); iel++)
+			{
+				for(int i = 0; i < nvars; i++) {
+					// finally, add the pseudo-time term (Vol/dt du = Vol/dt x)
+					yr[iel*nvars+i] = dtmr[iel]*xr[iel*nvars+i]
+						+ (-ygr[iel*nvars+i] + resr[iel*nvars+i])/pertmag;
+				}
+			}
+		}
+		
+		ierr = VecDestroy(&aux); CHKERRQ(ierr);
+		ierr = VecDestroy(&yg); CHKERRQ(ierr);
+		return ierr;
+	}
+	
+
+	template
+	PetscErrorCode mf_pc_apply1<NVARS>(PC pc, const Vec x, Vec y);
+	template
+	PetscErrorCode mf_pc_apply1<1>(PC pc, const Vec x, Vec y);
+	# endif
 
 	//template <int nvars>
 	//StatusCode MatrixFreePreconditioner::
