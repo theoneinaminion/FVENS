@@ -245,7 +245,6 @@ int SteadyFlowCase::execute_starter(const Spatial<freal,NVARS> *const prob, Vec 
 
 	if(mpirank == 0)
 		std::cout << "***\n";
-
 	LinearProblemLHS isol = setupImplicitSolver(startprob, mf_flg);
 
 	// set up time discrization

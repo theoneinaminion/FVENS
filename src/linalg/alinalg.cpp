@@ -133,9 +133,18 @@ template<int nvars>
 int MatrixFreeSpatialJacobian<nvars>::set_state(const Vec u_state, const Vec r_state,
 		const Vec dtms) 
 {
-	u = u_state;
-	res = r_state;
-	mdt = dtms;
+	 u = u_state;
+	 res = r_state;
+	 mdt = dtms;
+	// std::cout<<"eps:"<<eps<<std::endl;
+	// VecDuplicate(u_state, &u);
+	// VecDuplicate(r_state, &res);
+	// VecDuplicate(dtms, &mdt);
+
+	// VecCopy(u_state, u);
+	// VecCopy(r_state, res);
+	// VecCopy(dtms, mdt);
+	std::cout << " Matfree state set" << std::endl;
 	return 0;
 }
 

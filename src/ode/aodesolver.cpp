@@ -384,13 +384,20 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 	ierr = KSPGetOperators(solver, &A, &M); CHKERRQ(ierr);
 
 	const bool ismatrixfree = isMatrixFree(A);
+	Vec y1;
+	MatrixFreeSpatialJacobian<nvars>* mfA = nullptr ;
 	if(ismatrixfree) {
-		MatrixFreeSpatialJacobian<nvars>* mfA = nullptr;
-		ierr = MatShellGetContext(A, (void**)&mfA); CHKERRQ(ierr);
+		
+		ierr = MatShellGetContext(A, (void**) &mfA); CHKERRQ(ierr); // (void**)
+
 		// uvec, rvec and dtm keep getting updated, but pointers to them can be set just once
+		if (mfA==nullptr)
+			std::cout<<"mfA is nullptr"<<std::endl;
 		if(mpirank == 0)
 			std::cout << " Setting matfree state" << std::endl;
 		mfA->set_state(uvec,rvec, dtmvec);
+		
+
 	}
 
 	// get list of iterations at which to recompute AMG interpolation operators, if used
@@ -457,8 +464,8 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 		ierr = VecGhostUpdateBegin(rvec, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
-		ierr = MatZeroEntries(M); CHKERRQ(ierr);
-		ierr = space->assemble_jacobian(uvec, M); CHKERRQ(ierr);
+		//ierr = MatZeroEntries(M); CHKERRQ(ierr);
+		//ierr = space->assemble_jacobian(uvec, M); CHKERRQ(ierr);
 
 
 		
@@ -481,6 +488,35 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 		/// Freezes the non-zero structure for efficiency in subsequent time steps.
 		ierr = MatSetOption(M, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE); CHKERRQ(ierr);
+
+		ierr = VecDuplicate(uvec,&y1);CHKERRQ(ierr);
+
+		Vec yn;
+		ierr = VecDuplicate(uvec,&yn);CHKERRQ(ierr);
+
+		PetscRandom   rctx ;
+
+		  PetscRandomCreate(PETSC_COMM_WORLD,&rctx);
+		   PetscRandomSetSeed(rctx,3);
+     	  PetscRandomSeed(rctx);
+     	  VecSetRandom(yn,rctx);
+     	  PetscRandomDestroy(&rctx);
+
+		PetscScalar mod1;
+		VecNorm(yn,NORM_2,&mod1);
+
+	
+		mfA->apply(yn,y1);
+		PetscViewer viewer;
+
+
+	PetscCall(VecView(y1, PETSC_VIEWER_STDOUT_WORLD));
+
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "writing vector in binary to vector.dat ...\n"));
+   	PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, "matfree.dat", &viewer));
+    PetscCall(VecView(y1, viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
+		return -1;
 
     //user-defined preconditioner
 	if ABFLAG {
