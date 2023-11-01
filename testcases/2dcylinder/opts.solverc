@@ -2,9 +2,9 @@
 -options_left
 #-log_view
 
--mat_type shell
--matrix_free_jacobian
--matrix_free_difference_step 1e-6
+-mat_type baij
+#-matrix_free_jacobian
+#-matrix_free_difference_step 1e-6
 
 -ksp_type fgmres
 -ksp_rtol 1e-1
