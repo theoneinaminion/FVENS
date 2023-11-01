@@ -945,6 +945,23 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		StatusCode ierr = 0;
 		MatrixFreePreconditioner<nvars> *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
+		
+		Vec sum, temp;
+		ierr = VecCreate(PETSC_COMM_SELF, &sum);CHKERRQ(ierr);
+		ierr = VecSetType(sum, VECMPI);CHKERRQ(ierr);
+		ierr = VecSetSizes(sum, nvars, PETSC_DECIDE);CHKERRQ(ierr);
+		ierr = VecDuplicate(sum,&temp);CHKERRQ(ierr);
+		ierr = VecSet(sum,0);CHKERRQ(ierr);
+
+		Vec yst; 
+		ierr = VecDuplicate(shell->uvec,&yst);CHKERRQ(ierr);
+		ierr = VecCopy(x,yst);CHKERRQ(ierr); // initialize yst
+		ierr = VecCopy(x,y);CHKERRQ(ierr); // initialize y
+
+		Mat Dinv_i;  //MatType type;
+		ierr = MatCreateSeqAIJ(PETSC_COMM_WORLD, shell->blk_size, shell->blk_size, 0, NULL, &Dinv_i);CHKERRQ(ierr);
+		ierr = MatSetOption(Dinv_i, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);CHKERRQ(ierr);
+
 		Vec dummy = NULL;
 
 		if(!(shell->space))
@@ -954,9 +971,11 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		const UMesh<freal,NDIM> *const m = shell->space->mesh();
 		//ierr = VecSet(y, 0.0); CHKERRQ(ierr);
 
-		Vec aux, yg;
-		ierr = VecDuplicate(shell->uvec, &aux); CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->rvec, &yg); CHKERRQ(ierr);
+		Vec auxl, rfd_l,auxu,rfd_u;
+		ierr = VecDuplicate(shell->uvec, &auxl); CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->rvec, &rfd_l); CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec, &auxu); CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->rvec, &rfd_u); CHKERRQ(ierr);
 
 		PetscScalar xnorm = 0;
 		ierr = VecNorm(x, NORM_2, &xnorm); CHKERRQ(ierr);
@@ -966,70 +985,161 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FP,
 					"Norm of offset is too small for finite difference Jacobian!");
 	#endif
-		const freal eps = 1e-6;
-		const freal pertmag = eps/xnorm;
 
-		// aux <- u + eps/xnorm * x ;    y <- 0
+		for (fint iel = 0; iel < m->gnelem()*nvars; iel++) 
 		{
-			ConstVecHandler<PetscScalar> uh(shell->uvec);
-			const PetscScalar *const ur = uh.getArray();
-			ConstVecHandler<PetscScalar> xh(x);
-			const PetscScalar *const xr = xh.getArray();
-			MutableVecHandler<PetscScalar> auxh(aux);
-			PetscScalar *const auxr = auxh.getArray(); 
-			MutableVecHandler<PetscScalar> ygh(yg);
-			PetscScalar *const ygr = ygh.getArray(); 
+				PetscInt row,col;
+				PetscScalar va;
+				// set up Dinv matrix for the current element
+				for (PetscInt k = 0; k < nvars; k++)
+				{
+					 row = iel*nvars+k;
+					
+					for (PetscInt l = 0; l < nvars; l++)
+					{
+						col = iel*nvars+l;
+						
+						ierr = MatGetValue(shell->Dinv, row, col, &va); CHKERRQ(ierr); 
+						ierr = MatSetValue(Dinv_i,k,l,va,INSERT_VALUES); CHKERRQ(ierr); 
+						//std::cout<<"--"<<row<<col<<std::endl;
 
-	#pragma omp parallel for simd default(shared)
-			for(fint i = 0; i < m->gnelem()*nvars; i++) {
-				ygr[i] = 0;
-				auxr[i] = ur[i] + pertmag * xr[i];
-			}
-
-	#pragma omp parallel for simd default(shared)
-			for(fint i = m->gnelem(); i < m->gnelem()+m->gnConnFace(); i++) {
-				ygr[i] = 0;
-			}
-		}
-
-		ierr = VecGhostUpdateBegin(aux, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
-		ierr = VecGhostUpdateEnd(aux, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
-
-		// y <- -r(u + eps/xnorm * x)
-		ierr = shell->space->compute_residual(aux, yg, false, dummy); CHKERRQ(ierr);
-
-		ierr = VecGhostUpdateBegin(yg, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-		ierr = VecGhostUpdateEnd(yg, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-
-		// y <- vol/dt x + (-(-r(u + eps/xnorm * x)) + (-r(u))) / eps |x|
-		//    = vol/dt x + (r(u + eps/xnorm * x) - r(u)) / eps |x|
-		/* We need to divide the difference by the step length scaled by the norm of x.
-		* We do NOT divide by epsilon, because we want the product of the Jacobian and x, which is
-		* the directional derivative (in the direction of x) multiplied by the norm of x.
-		*/
-		{
-			ConstVecHandler<PetscScalar> xh(x);
-			const PetscScalar *const xr = xh.getArray();
-			ConstVecHandler<PetscScalar> resh(shell->rvec);
-			const PetscScalar *const resr = resh.getArray();
-			ConstVecHandler<PetscScalar> ygh(yg);
-			const PetscScalar *const ygr = ygh.getArray();
-			MutableVecHandler<PetscScalar> yh(y);
-			PetscScalar *const yr = yh.getArray(); 
-
-	#pragma omp parallel for simd default(shared)
-			for(fint iel = 0; iel < m->gnelem(); iel++)
-			{
-				for(int i = 0; i < nvars; i++) {
-					// finally, add the pseudo-time term (Vol/dt du = Vol/dt x)
-					yr[iel*nvars+i] = dtmr[iel]*xr[iel*nvars+i]
-						+ (-ygr[iel*nvars+i] + resr[iel*nvars+i])/pertmag;
-				}
-			}
-		}
+					}
+					
+				}				
 		
-		ierr = VecDestroy(&aux); CHKERRQ(ierr);
-		ierr = VecDestroy(&yg); CHKERRQ(ierr);
+				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
+				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+
+
+
+				const freal eps = 1e-6;
+				const freal pertmag = eps/xnorm;
+
+
+				// aux <- u + eps/xnorm * x ;    y <- 0
+				{
+					ConstVecHandler<PetscScalar> uh(shell->uvec);
+					const PetscScalar *const u_arr = uh.getArray();
+					MutableVecHandler<PetscScalar> auxh(auxl);
+					PetscScalar *const aux_l = auxh.getArray(); 
+					MutableVecHandler<PetscScalar> auxi(auxu);
+					PetscScalar *const aux_u = auxi.getArray();
+					MutableVecHandler<PetscScalar> ygl(rfd_l);
+					PetscScalar *const res_l = ygl.getArray();
+					MutableVecHandler<PetscScalar> ygu(rfd_u);
+					PetscScalar *const res_u = ygu.getArray();
+					MutableVecHandler<PetscScalar> ysth(yst);
+					PetscScalar *const yst_arr = ysth.getArray();
+					MutableVecHandler<PetscScalar> ygh(y);
+					PetscScalar *const y_arr = ygh.getArray();
+
+			//#pragma omp parallel for simd default(shared)
+					for(fint i = 0; i < m->gnelem()*nvars; i++) 
+					{
+						res_l[i] = 0;
+						res_u[i] = 0;
+						aux_l[i] = u_arr[i] + pertmag * yst_arr[i];
+						aux_u[i] = u_arr[i] + pertmag * y_arr[i];
+					}
+					
+				}
+
+				// ierr = VecGhostUpdateBegin(auxl, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+				// ierr = VecGhostUpdateEnd(auxl, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+
+				// ierr = VecGhostUpdateBegin(auxu, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+				// ierr = VecGhostUpdateEnd(auxu, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+
+				// y <- -r(u + eps/xnorm * x)
+				ierr = shell->space->compute_residual(auxl, rfd_l, false, dummy); CHKERRQ(ierr);
+
+				// ierr = VecGhostUpdateBegin(rfd_l, INSERT_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+				// ierr = VecGhostUpdateEnd(rfd_l, INSERT_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+				ierr = shell->space->compute_residual(auxu, rfd_u, false, dummy); CHKERRQ(ierr);
+
+				// ierr = VecGhostUpdateBegin(rfd_u, INSERT_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+				// ierr = VecGhostUpdateEnd(rfd_u, INSERT_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+				
+				// y <- vol/dt x + (-(-r(u + eps/xnorm * x)) + (-r(u))) / eps |x|
+				//    = vol/dt x + (r(u + eps/xnorm * x) - r(u)) / eps |x|
+				/* We need to divide the difference by the step length scaled by the norm of x.
+				* We do NOT divide by epsilon, because we want the product of the Jacobian and x, which is
+				* the directional derivative (in the direction of x) multiplied by the norm of x.
+				*/
+				
+
+				{
+					ConstVecHandler<PetscScalar> xh(x);
+					const PetscScalar *const x_arr = xh.getArray();
+					ConstVecHandler<PetscScalar> resh(shell->rvec);
+					const PetscScalar *const res_arr = resh.getArray();
+					MutableVecHandler<PetscScalar> ygl(rfd_l);
+					PetscScalar *const res_l = ygl.getArray();
+					MutableVecHandler<PetscScalar> ygu(rfd_u);
+					PetscScalar *const res_u = ygu.getArray();
+					MutableVecHandler<PetscScalar> yi(yst);
+					PetscScalar *const yst_arr = yi.getArray();
+					MutableVecHandler<PetscScalar> yh(y);
+					PetscScalar *const y_arr = yh.getArray();
+					MutableVecHandler<PetscScalar> sumh(sum);
+					PetscScalar *const sum_l = sumh.getArray(); 
+					
+
+
+					// L-loop
+					//setting the sum to be equal to zero. 
+			//#pragma omp parallel for simd default(shared)
+					for(fint jel = 0; jel < iel; jel++)
+					{
+						for(int k = 0; k < nvars; k++) {
+							// finally, add the pseudo-time term (Vol/dt du = Vol/dt x)
+							sum_l[k] = sum_l[k] + (res_l[jel*nvars+k] - res_arr[jel*nvars+k])/pertmag;
+						}
+
+						for(int k = 0; k < nvars; k++) {
+							sum_l[k] = x_arr[jel*nvars+k] - sum_l[k]; // sum = x-\sigma_{jel=0:iel-1} (r(u+eps*x)-r(u))/eps
+						}
+					}
+
+					//Do the D^{-1}*sum
+					ierr = MatMult(Dinv_i, sum, temp);CHKERRQ(ierr);
+						for (fint k = 0; k < nvars; k++)
+						{
+							ierr = VecGetValues(temp,1,&k,&va);CHKERRQ(ierr);
+							yst_arr[iel*nvars + k] = va;
+						}
+						
+					
+
+					ierr = VecSet(sum,0);CHKERRQ(ierr);
+					MutableVecHandler<PetscScalar> sumi(sum);
+					PetscScalar *const sum_u = sumi.getArray();
+
+					// U-loop
+			//#pragma omp parallel for simd default(shared)		
+					for(fint jel = iel+1; jel < m->gnelem()*nvars; jel++)
+					{
+						for(int k = 0; k < nvars; k++) {
+							// finally, add the pseudo-time term (Vol/dt du = Vol/dt x)
+							sum_u[k] = sum_u[k]+(res_u[jel*nvars+k] - res_arr[jel*nvars+k])/pertmag;
+						}
+	
+					}
+
+					ierr = MatMult(Dinv_i, sum, temp);CHKERRQ(ierr);
+						for (fint k = 0; k < nvars; k++)
+						{
+							ierr = VecGetValues(temp,1,&k,&va);CHKERRQ(ierr);
+							y_arr[iel*nvars + k] = yst_arr[iel*nvars + k] - va;
+						}
+
+
+				}
+
+		}
+
+
 		return ierr;
 	}
 	
