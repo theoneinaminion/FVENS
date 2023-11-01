@@ -938,7 +938,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 
 	
-	# if 0
+	# if 1
 	template<int nvars>
 	PetscErrorCode mf_pc_apply1(PC pc,const Vec x, Vec y)
 	{
@@ -966,7 +966,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FP,
 					"Norm of offset is too small for finite difference Jacobian!");
 	#endif
-		const freal eps = 1e-7;
+		const freal eps = 1e-6;
 		const freal pertmag = eps/xnorm;
 
 		// aux <- u + eps/xnorm * x ;    y <- 0
