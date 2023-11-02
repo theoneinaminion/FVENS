@@ -207,6 +207,9 @@ StatusCode MatrixFreeSpatialJacobian<nvars>::apply(const Vec x, Vec y) const
 	ierr = VecGhostUpdateBegin(yg, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 	ierr = VecGhostUpdateEnd(yg, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
+	std::string name = "kashi_matfreeres.dat";
+	writePetscObj(yg, name);
+	return -1;
 	// y <- vol/dt x + (-(-r(u + eps/xnorm * x)) + (-r(u))) / eps |x|
 	//    = vol/dt x + (r(u + eps/xnorm * x) - r(u)) / eps |x|
 	/* We need to divide the difference by the step length scaled by the norm of x.
@@ -607,7 +610,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		eps = nrm1/(vecsize*nrm2);
 		eps = eps*(std::pow(10,-6))+std::pow(10,-6); // epsilon used in matrix-free finite diff
 		
-		double pertmag = (1e-7)/nrm1;
+		double pertmag = (1e-6)/nrm2;
 		return pertmag;
 
 }
@@ -744,7 +747,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		// std::cout<<"b"<<b<<std::endl;
 		// std::cout<<"n"<<shell->n<<std::endl;
 		// std::cout<<"blk_size"<<shell->blk_size<<std::endl;
-
+		
 		int maxiter = 10;
 		int iter = 0;
 	    PetscReal tol1 = 10;
@@ -775,12 +778,20 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				ierr = VecAssemblyBegin(rst);CHKERRQ(ierr);
 				ierr = VecAssemblyEnd(rst);CHKERRQ(ierr);
 
+				
+
 				eps  =  shell->epsilon_calc(shell->uvec, y);
 				ierr = VecWAXPY(u,eps,y,shell->uvec);CHKERRQ(ierr); // ust = eps*yst + shell->uvec
 				ierr = shell->space->compute_residual(u, r, false, blank); CHKERRQ(ierr); // r(u+eps*yst)
 				//std::cout<<eps<<std::endl;
 				ierr = VecAssemblyBegin(r);CHKERRQ(ierr);
-				ierr = VecAssemblyEnd(r);CHKERRQ(ierr);				
+				ierr = VecAssemblyEnd(r);CHKERRQ(ierr);	
+				
+				// std::string name = "r.dat";
+				// writePetscObj(r, name);
+				// name = "rst.dat";
+				// writePetscObj(rst, name);
+				// return -1;			
 				
 				ierr = VecSet(sum,0);CHKERRQ(ierr);
 								
@@ -938,7 +949,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 
 	
-	# if 1
+	# if 0
 	template<int nvars>
 	PetscErrorCode mf_pc_apply1(PC pc,const Vec x, Vec y)
 	{
@@ -1153,7 +1164,8 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	//template <int nvars>
 	//StatusCode MatrixFreePreconditioner::
 	template<int nvars>
-	PetscErrorCode mf_pc_destroy(PC pc){
+	PetscErrorCode mf_pc_destroy(PC pc)
+	{
 	// Set up matrix free PC
 	StatusCode ierr = 0;
 	// Vec diag;
@@ -1173,8 +1185,40 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	template
 	PetscErrorCode mf_pc_destroy<1>(PC pc);
 
-}
 
+PetscErrorCode writePetscObj(Vec &v)
+	
+	{
+
+		PetscViewer viewer;
+
+		PetscCall(VecView(v, PETSC_VIEWER_STDOUT_WORLD));
+
+		PetscCall(PetscPrintf(PETSC_COMM_WORLD, "writing vector ...\n"));
+		PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, "vector.dat", &viewer));
+		PetscCall(VecView(v, viewer));
+		PetscCall(PetscViewerDestroy(&viewer));
+		return 0;
+
+	} 
+
+	PetscErrorCode writePetscObj(Vec &v, std::string name)
+	
+	{
+
+		PetscViewer viewer;
+		const std::string namefin = name + ".dat";
+		PetscCall(VecView(v, PETSC_VIEWER_STDOUT_WORLD));
+
+		PetscCall(PetscPrintf(PETSC_COMM_WORLD, "writing vector ...\n"));
+		PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, namefin.c_str(), &viewer));
+		PetscCall(VecView(v, viewer));
+		PetscCall(PetscViewerDestroy(&viewer));
+		return 0;
+
+	} 
+
+}
 
 
 

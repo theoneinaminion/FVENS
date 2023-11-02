@@ -183,8 +183,9 @@ public:
 	
 	//StatusCode get_diagblk_inv (const Vec uvec, Mat A);
 	
+	PetscErrorCode writePetscObj(Vec &v, std::string name); 
+	//void writePetscObj(Mat &A, char *name);
 
-
-
+	PetscErrorCode writePetscObj(Vec &v);
 }
 #endif

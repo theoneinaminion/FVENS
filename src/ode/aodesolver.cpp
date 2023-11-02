@@ -486,7 +486,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 		/// Freezes the non-zero structure for efficiency in subsequent time steps.
 		ierr = MatSetOption(M, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE); CHKERRQ(ierr);
-
+		//mfa->apply(uvec, rvec);
     //user-defined preconditioner
 	if ABFLAG {
 		StatusCode ierr = 0;
