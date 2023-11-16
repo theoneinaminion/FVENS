@@ -694,7 +694,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 
 		//mc_lusgs(x,y);
-		Vec temp,nrm,ust, rst,u,r, blank, yst, yst1,yst2;
+		Vec temp,nrm,ust, rst,u,r, blank, yst, ycopy,yst2;
 
 	// 	PetscInt locnelem;
 	// ierr = VecGetSize(x, &locnelem); CHKERRQ(ierr);
@@ -710,7 +710,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		ierr = VecDuplicate(shell->uvec,&u);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&r);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&yst);CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->uvec,&yst1);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&ycopy);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&yst2);CHKERRQ(ierr);
 
 
@@ -754,7 +754,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		while (tol1>=1e-6 && iter<=maxiter)
 		{	
 
-			ierr = VecCopy(y,yst1);CHKERRQ(ierr); // Saving the value from prev iteration
+			ierr = VecCopy(y,ycopy);CHKERRQ(ierr); // Saving the value from prev iteration
 			iter = iter+1;
 			std::cout<<"iter"<<iter<<std::endl;
 			
@@ -787,11 +787,8 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				ierr = VecAssemblyBegin(r);CHKERRQ(ierr);
 				ierr = VecAssemblyEnd(r);CHKERRQ(ierr);	
 				
-				// std::string name = "r.dat";
-				// writePetscObj(r, name);
-				// name = "rst.dat";
-				// writePetscObj(rst, name);
-				// return -1;			
+				
+					
 				
 				ierr = VecSet(sum,0);CHKERRQ(ierr);
 								
@@ -824,7 +821,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 
 				}
-
+					
 				//PetscInt indx[shell->blk_size];
 					
 				PetscScalar xget[shell->blk_size],sum_get;
@@ -839,7 +836,6 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				}
 				ierr = VecAssemblyBegin(temp);CHKERRQ(ierr);
 				ierr = VecAssemblyEnd(temp);CHKERRQ(ierr);
-
 
 				//  Dinv_{i block}*temp = yst_jblock here 
 				
@@ -864,7 +860,8 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 
 				ierr = MatMult(Dinv_i, temp, y_stari);CHKERRQ(ierr); //temporarily store the product in sum
-
+				
+				
 				// writing the final values to yst
 
 				for (PetscInt k = 0; k < shell->blk_size; k++)
@@ -876,11 +873,11 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				ierr = VecAssemblyBegin(yst);CHKERRQ(ierr);
 				ierr = VecAssemblyEnd(yst);CHKERRQ(ierr); // \Delta U^* has been assembled for the entire domain. 
 
+				
 
 
-
-
-				// U loop
+				// U loop 
+				// This is the problem. 2023-11-16
 				ierr = VecSet(sum,0); CHKERRQ(ierr); 
 				for (int j = i; j < b; j++)
 				{
@@ -894,12 +891,21 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 					//std::cout<<vecsize<<"vecsize"<<std::endl;
 					// get respective values of r(w_j+eps*z_j) and r(w_j) in he given block.
 					ierr = VecGetValues(shell->rvec,shell->blk_size,idx,ry);CHKERRQ(ierr);
-					ierr = VecGetValues(r,shell->blk_size,idx,rsty);CHKERRQ(ierr);
+					ierr = VecGetValues(r,shell->blk_size,idx,rsty);CHKERRQ(ierr); // This is wrong. The new residual must have updated yst. Is that what is going on? check. 2023-11-16
 					
 					
 					for (PetscInt k = 0; k < shell->blk_size; k++)
 					{	
 						val = (rsty[k]-ry[k])/eps;
+
+						if (val > 1000) {std::cout<<"val------"<<val<<std::endl;
+						std::cout<<"i------"<<i<<std::endl;
+						std::cout<<"j-----"<<j<<std::endl;
+						std::cout<<"rsty------"<<rsty[k]<<std::endl;
+						std::cout<<"ry------"<<ry[k]<<std::endl;
+						return -1;
+						}
+						
 						ierr = VecSetValue(sum,k,val,ADD_VALUES); CHKERRQ(ierr);
 					}
 					ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
@@ -908,6 +914,16 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				
 				ierr = MatMult(Dinv_i, sum, temp);CHKERRQ(ierr); 
 				ierr = VecWAXPY(y_i,-1,temp,y_stari); // y_i = y_stari - temp
+				
+				
+				// if (i==1)
+				// {
+				// 	writePetscObj(sum, "sum");
+				// 	return -1;
+					
+				// }	
+
+
 
 				for (PetscInt k = 0; k < shell->blk_size; k++)
 				{
@@ -928,11 +944,11 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				
 			}
 
-			
+
 
 
 			// error tol to check convergence
-			ierr = VecWAXPY(nrm,-1.0,y,yst1);CHKERRQ(ierr);
+			ierr = VecWAXPY(nrm,-1.0,y,ycopy);CHKERRQ(ierr);
 			ierr =VecNorm(nrm,NORM_2,&tol1);CHKERRQ(ierr);
 			std::cout<<tol1<<"tol1"<<std::endl;
 
@@ -1186,17 +1202,24 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	PetscErrorCode mf_pc_destroy<1>(PC pc);
 
 
-PetscErrorCode writePetscObj(Vec &v)
+PetscErrorCode writePetscObj(Mat &A, std::string name)
 	
 	{
 
 		PetscViewer viewer;
 
-		PetscCall(VecView(v, PETSC_VIEWER_STDOUT_WORLD));
+		
 
-		PetscCall(PetscPrintf(PETSC_COMM_WORLD, "writing vector ...\n"));
-		PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, "vector.dat", &viewer));
-		PetscCall(VecView(v, viewer));
+		const std::string namefin = name + ".m";
+		PetscCall(MatView(A, PETSC_VIEWER_STDOUT_WORLD));
+		PetscCall(PetscPrintf(PETSC_COMM_WORLD, "writing matrix ...\n"));
+		PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, namefin.c_str(), &viewer));
+		PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));
+        PetscCall(MatView(A, viewer));
+
+		
+		// PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, namefin.c_str(), &viewer));
+		// PetscCall(MatView(v, viewer));
 		PetscCall(PetscViewerDestroy(&viewer));
 		return 0;
 

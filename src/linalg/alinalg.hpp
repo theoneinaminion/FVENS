@@ -186,6 +186,6 @@ public:
 	PetscErrorCode writePetscObj(Vec &v, std::string name); 
 	//void writePetscObj(Mat &A, char *name);
 
-	PetscErrorCode writePetscObj(Vec &v);
+	PetscErrorCode writePetscObj(Mat &A, std::string name);
 }
 #endif
