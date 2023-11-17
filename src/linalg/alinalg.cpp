@@ -1177,6 +1177,120 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	PetscErrorCode mf_pc_apply1<1>(PC pc, const Vec x, Vec y);
 	# endif
 
+	template<int nvars>
+	PetscErrorCode mf_pc_apply2(PC pc, Vec x, Vec y){
+
+		int ierr = 0;
+		MatrixFreePreconditioner<nvars> *shell;
+		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
+		const UMesh<freal,NDIM> *const m = shell->space->mesh();
+
+		PetscScalar tol = 1e-6, nrm = 10;
+
+		Vec z,yold;
+		ierr = VecDuplicate(shell->uvec,&z);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&yold);CHKERRQ(ierr);
+		ierr = VecCopy(x,z);CHKERRQ(ierr); // initialize z
+		ierr = VecCopy(x,y);CHKERRQ(ierr); // initialize y
+		
+		/*
+			// Initializing z and y to random vectors 
+			init_rand(z);
+			init_rand(y);
+
+		*/
+
+		// ####### Setup Auxillary data ################
+		Vec sum; // summing over the residuals
+
+		ierr = VecCreate(PETSC_COMM_SELF, &sum);CHKERRQ(ierr);
+		ierr = VecSetType(sum, VECMPI);CHKERRQ(ierr);
+		ierr = VecSetSizes(sum, nvars, PETSC_DECIDE);CHKERRQ(ierr);
+		ierr = VesSet(sum,0);CHKERRQ(ierr);
+
+		Mat Dinv_i;  //Inverse diagnoal at i^th element
+		ierr = MatCreateSeqAIJ(PETSC_COMM_WORLD, nvars,nvars, 0, NULL, &Dinv_i);CHKERRQ(ierr);
+		ierr = MatSetOption(Dinv_i, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);CHKERRQ(ierr);
+
+		PetscScalar idx[nvars],relem[nvars], relem_pert[nvars], val; 
+
+
+		// ########### Start Iteration #################
+		while (nrm > tol)
+		{
+			ierr = 	VecCopy(y,yold); CHKERRQ(ierr);
+
+			for (int i = 0; i < m->nelem; i++)
+			{
+				PetscScalar pertmag = epsilon_calc(shell->uvec, z);
+
+				// #### Write the residual with u = shell->uvec #####
+				Vec rvec;
+				ierr = VecDuplicate(shell->uvec,&rvec);CHKERRQ(ierr);
+				shell->space->compute_residual(shell->uvec, rvec, false, NULL); CHKERRQ(ierr);
+
+
+				// #### Write the residual with u = shell->uvec + pertmag*z for L-Loop #####
+				Vec uvec_Lpert,rvec_L;
+				ierr = VecDuplicate(shell->uvec,&rvec);CHKERRQ(ierr);
+				ierr = VecDuplicate(shell->uvec,&uvec_Lpert);CHKERRQ(ierr);
+				ierr = VecWAXPY(uvec_Lpert,pertmag,z,shell->uvec);CHKERRQ(ierr);
+				shell->space->compute_residual(uvec_Lpert, rvec_L, false, NULL); CHKERRQ(ierr);
+
+				// ############# Get the Diagonal Block of i^th element #############
+				for (PetscInt k = 0; k < nvars; k++)
+				{
+					PetscInt row = i*nvars+k;
+					
+					for (PetscInt l = 0; l < nvars; l++)
+					{
+						PetscInt col = i*nvars+l;
+						
+						ierr = MatGetValue(shell->Dinv, row, col, &val); CHKERRQ(ierr); 
+						ierr = MatSetValue(Dinv_i,k,l,val,INSERT_VALUES); CHKERRQ(ierr); 
+
+					}
+					
+				}
+				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
+				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+
+
+
+				// #################    L-Loop	#####################
+				
+				for (int j = 0; j < i; j++)
+				{
+					for (int k = 0; i < nvars; i++)
+					{
+						idx[k] = nvars*j+k;
+					}
+					ierr = VecGetValues(rvec,nvars,idx,relem);CHKERRQ(ierr);
+					ierr = VecGetValues(rvec_L,nvars,idx,relem_pert);CHKERRQ(ierr);
+					ierr = VecGetValues(z,nvars,idx,z_pert);CHKERRQ(ierr);
+
+					for (int k = 0; k < nvars; k++)
+					{
+						val = (relem_pert[k]-relem[k])/pertmag;
+						ierr = VecSetValues(sum,1,&k,val,ADD_VALUES);CHKERRQ(ierr);
+					}
+					
+				}
+				
+
+
+			}
+			/* code */
+		}
+		
+		
+		
+	
+	}
+	template
+	PetscErrorCode mf_pc_apply2<NVARS>(PC pc, const Vec x, Vec y);
+	template
+	PetscErrorCode mf_pc_apply2<1>(PC pc, const Vec x, Vec y);
 	//template <int nvars>
 	//StatusCode MatrixFreePreconditioner::
 	template<int nvars>
@@ -1201,6 +1315,16 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	template
 	PetscErrorCode mf_pc_destroy<1>(PC pc);
 
+	PetscErrorCode init_rand(Vec &v)
+	{
+		PetscRandom   rctx ;
+		ierr = PetscRandomCreate(PETSC_COMM_WORLD,&rctx);
+		PetscRandomSetSeed(rctx,3); // set seed. const seed ensures same random numbers are generated in diff machines
+		PetscRandomSeed(rctx);
+		VecSetRandom(v,rctx);
+		PetscRandomDestroy(&rctx);
+
+	}
 
 PetscErrorCode writePetscObj(Mat &A, std::string name)
 	

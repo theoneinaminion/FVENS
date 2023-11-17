@@ -176,6 +176,8 @@ public:
 	template<int nvars>
 	PetscErrorCode mf_pc_apply1(PC pc, const Vec x, Vec y);
 	template<int nvars>
+	PetscErrorCode mf_pc_apply2(PC pc, const Vec x, Vec y);
+	template<int nvars>
 	PetscErrorCode mf_pc_destroy(PC pc);
 
 	PetscErrorCode mf_lusgs(Vec x, Vec y);
@@ -187,5 +189,6 @@ public:
 	//void writePetscObj(Mat &A, char *name);
 
 	PetscErrorCode writePetscObj(Mat &A, std::string name);
+	PetscErrorCode init_rand(Vec &v);// Initialize a vector with random values
 }
 #endif
