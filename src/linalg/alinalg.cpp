@@ -207,9 +207,6 @@ StatusCode MatrixFreeSpatialJacobian<nvars>::apply(const Vec x, Vec y) const
 	ierr = VecGhostUpdateBegin(yg, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 	ierr = VecGhostUpdateEnd(yg, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
-	std::string name = "kashi_matfreeres.dat";
-	writePetscObj(yg, name);
-	return -1;
 	// y <- vol/dt x + (-(-r(u + eps/xnorm * x)) + (-r(u))) / eps |x|
 	//    = vol/dt x + (r(u + eps/xnorm * x) - r(u)) / eps |x|
 	/* We need to divide the difference by the step length scaled by the norm of x.
@@ -1183,13 +1180,13 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		int ierr = 0;
 		MatrixFreePreconditioner<nvars> *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
-		const UMesh<freal,NDIM> *const m = shell->space->mesh();
-
+		int nelem = (shell->n)/nvars;
 		PetscScalar tol = 1e-6, nrm = 10;
 
-		Vec z,yold;
+		Vec z,yold, diff;
 		ierr = VecDuplicate(shell->uvec,&z);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&yold);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&diff);CHKERRQ(ierr); // difference between y and yold
 		ierr = VecCopy(x,z);CHKERRQ(ierr); // initialize z
 		ierr = VecCopy(x,y);CHKERRQ(ierr); // initialize y
 		
@@ -1201,41 +1198,43 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		*/
 
 		// ####### Setup Auxillary data ################
-		Vec sum; // summing over the residuals
+		Vec sum, zelem, tempvec; // summing over the residuals
 
 		ierr = VecCreate(PETSC_COMM_SELF, &sum);CHKERRQ(ierr);
 		ierr = VecSetType(sum, VECMPI);CHKERRQ(ierr);
 		ierr = VecSetSizes(sum, nvars, PETSC_DECIDE);CHKERRQ(ierr);
-		ierr = VesSet(sum,0);CHKERRQ(ierr);
+		ierr = VecDuplicate(sum,&zelem);CHKERRQ(ierr);
+		ierr = VecDuplicate(sum,&tempvec);CHKERRQ(ierr);
 
 		Mat Dinv_i;  //Inverse diagnoal at i^th element
 		ierr = MatCreateSeqAIJ(PETSC_COMM_WORLD, nvars,nvars, 0, NULL, &Dinv_i);CHKERRQ(ierr);
 		ierr = MatSetOption(Dinv_i, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);CHKERRQ(ierr);
 
-		PetscScalar idx[nvars],relem[nvars], relem_pert[nvars], val; 
+		Vec &rvec = shell->rvec; // residual vector r(shell->uvec) reference pointer
+
+		PetscScalar relem[nvars], relem_pert[nvars], tempelem[nvars],val; 
+		PetscInt idx[nvars];
 
 
 		// ########### Start Iteration #################
+		int iter = 0;
 		while (nrm > tol)
 		{
 			ierr = 	VecCopy(y,yold); CHKERRQ(ierr);
 
-			for (int i = 0; i < m->nelem; i++)
+			for (int i = 0; i < nelem; i++)
 			{
-				PetscScalar pertmag = epsilon_calc(shell->uvec, z);
-
-				// #### Write the residual with u = shell->uvec #####
-				Vec rvec;
-				ierr = VecDuplicate(shell->uvec,&rvec);CHKERRQ(ierr);
-				shell->space->compute_residual(shell->uvec, rvec, false, NULL); CHKERRQ(ierr);
-
-
+				
 				// #### Write the residual with u = shell->uvec + pertmag*z for L-Loop #####
+				PetscScalar pertmag = shell->epsilon_calc(shell->uvec, z);
 				Vec uvec_Lpert,rvec_L;
-				ierr = VecDuplicate(shell->uvec,&rvec);CHKERRQ(ierr);
+				ierr = VecDuplicate(shell->uvec,&rvec_L);CHKERRQ(ierr);
 				ierr = VecDuplicate(shell->uvec,&uvec_Lpert);CHKERRQ(ierr);
 				ierr = VecWAXPY(uvec_Lpert,pertmag,z,shell->uvec);CHKERRQ(ierr);
 				shell->space->compute_residual(uvec_Lpert, rvec_L, false, NULL); CHKERRQ(ierr);
+
+				ierr = VecGhostUpdateBegin(rvec_L, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+				ierr = VecGhostUpdateEnd(rvec_L, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
 				// ############# Get the Diagonal Block of i^th element #############
 				for (PetscInt k = 0; k < nvars; k++)
@@ -1250,15 +1249,20 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 						ierr = MatSetValue(Dinv_i,k,l,val,INSERT_VALUES); CHKERRQ(ierr); 
 
 					}
+					idx[k] = row;
 					
 				}
 				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
 				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 
-
+				// ############## Get x_i and store it in tempvec ######################
+				ierr = VecGetValues(x,nvars,idx,tempelem);CHKERRQ(ierr); 
+				ierr = VecSetValues(tempvec,nvars,idx,tempelem,INSERT_VALUES);CHKERRQ(ierr);
+				ierr = VecAssemblyBegin(tempvec);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(tempvec);CHKERRQ(ierr);
 
 				// #################    L-Loop	#####################
-				
+				ierr = VecSet(sum,0); CHKERRQ(ierr); // Initialize sum to 0
 				for (int j = 0; j < i; j++)
 				{
 					for (int k = 0; i < nvars; i++)
@@ -1267,23 +1271,93 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 					}
 					ierr = VecGetValues(rvec,nvars,idx,relem);CHKERRQ(ierr);
 					ierr = VecGetValues(rvec_L,nvars,idx,relem_pert);CHKERRQ(ierr);
-					ierr = VecGetValues(z,nvars,idx,z_pert);CHKERRQ(ierr);
 
 					for (int k = 0; k < nvars; k++)
 					{
 						val = (relem_pert[k]-relem[k])/pertmag;
-						ierr = VecSetValues(sum,1,&k,val,ADD_VALUES);CHKERRQ(ierr);
+						ierr = VecSetValues(sum,1,&k,&val,ADD_VALUES);CHKERRQ(ierr);
 					}
+					ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
+					ierr = VecAssemblyEnd(sum);CHKERRQ(ierr);
 					
 				}
 				
+				
+								
+				
+				ierr = VecAXPY(tempvec,-1,sum);CHKERRQ(ierr);
+				
+				ierr = MatMult(Dinv_i, tempvec, sum);CHKERRQ(ierr); //temporarily store the product in sum
 
+				// ######### Update z_i ############
+				for (int k = 0; k < nvars; k++)
+				{
+					ierr = VecGetValues(sum,1,&k,&val);CHKERRQ(ierr);
+					idx[k] = nvars*i+k;
+					ierr = VecSetValues(z,1,&idx[k],&val,INSERT_VALUES);CHKERRQ(ierr);
+					ierr = VecSetValues(zelem,1,&k,&val,INSERT_VALUES);CHKERRQ(ierr);
+				}
+				ierr = VecAssemblyBegin(z);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(z);CHKERRQ(ierr);
+
+				ierr = VecAssemblyBegin(zelem);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(zelem);CHKERRQ(ierr);
+
+
+				// ########## Get Redisuals for doing r(u+pertmag*y) for U-Loop ##########
+				pertmag = shell->epsilon_calc(shell->uvec, y);
+				Vec uvec_Upert,rvec_U;
+				ierr = VecDuplicate(shell->uvec,&rvec_U);CHKERRQ(ierr);
+				ierr = VecDuplicate(shell->uvec,&uvec_Upert);CHKERRQ(ierr);
+				ierr = VecWAXPY(uvec_Upert,pertmag,y,shell->uvec);CHKERRQ(ierr);
+				shell->space->compute_residual(uvec_Upert, rvec_U, false, NULL); CHKERRQ(ierr);
+				ierr = VecGhostUpdateBegin(rvec_U, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+				ierr = VecGhostUpdateEnd(rvec_U, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+				
+				// #################    U-Loop	#####################
+				ierr = VecSet(sum,0);CHKERRQ(ierr); // Initialize sum to 0
+				for (int j = i+1; j < nelem; i++)
+				{
+					for (int k = 0; i < nvars; i++)
+					{
+						idx[k] = nvars*j+k;
+					}
+					ierr = VecGetValues(rvec,nvars,idx,relem);CHKERRQ(ierr);
+					ierr = VecGetValues(rvec_U,nvars,idx,relem_pert);CHKERRQ(ierr);
+
+					for (int k = 0; k < nvars; k++)
+					{
+						val = (relem_pert[k]-relem[k])/pertmag;
+						ierr = VecSetValues(sum,1,&k,&val,ADD_VALUES);CHKERRQ(ierr);
+					}
+					ierr = VecAssemblyBegin(sum);CHKERRQ(ierr);
+					ierr = VecAssemblyEnd(sum);CHKERRQ(ierr);
+				}
+
+				ierr = MatMult(Dinv_i, sum, tempvec);CHKERRQ(ierr); 
+				ierr = VecAXPY(sum,-1,tempvec); CHKERRQ(ierr); // sum = z_i - Dinv_i*sum
+
+				for (int k = 0; k < nvars; k++)
+				{
+					ierr = VecGetValues(sum,1,&k,&val);CHKERRQ(ierr);
+					idx[k] = nvars*i+k;
+					ierr = VecSetValues(y,1,&idx[k],&val,INSERT_VALUES);CHKERRQ(ierr);
+				}
+				ierr = VecAssemblyBegin(y);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(y);CHKERRQ(ierr);
+				
 
 			}
-			/* code */
+
+			ierr = VecWAXPY(diff,-1.0,y,yold);CHKERRQ(ierr);
+			ierr = VecNorm(diff,NORM_2,&nrm);CHKERRQ(ierr);
+			std::cout<<nrm<<"nrm"<<std::endl;
+			iter = iter+1;
+			std::cout<<iter<<"iter"<<std::endl;
 		}
 		
-		
+		return 0;
 		
 	
 	}
@@ -1318,11 +1392,12 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	PetscErrorCode init_rand(Vec &v)
 	{
 		PetscRandom   rctx ;
-		ierr = PetscRandomCreate(PETSC_COMM_WORLD,&rctx);
+		PetscRandomCreate(PETSC_COMM_WORLD,&rctx);
 		PetscRandomSetSeed(rctx,3); // set seed. const seed ensures same random numbers are generated in diff machines
 		PetscRandomSeed(rctx);
 		VecSetRandom(v,rctx);
 		PetscRandomDestroy(&rctx);
+		return 0;
 
 	}
 
