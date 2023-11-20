@@ -1221,10 +1221,11 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		while (nrm > tol)
 		{
 			ierr = 	VecCopy(y,yold); CHKERRQ(ierr);
+			// writePetscObj(yold,"yold");
+			// writePetscObj(x,"x");
 
 			for (int i = 0; i < nelem; i++)
 			{
-				
 				// #### Write the residual with u = shell->uvec + pertmag*z for L-Loop #####
 				PetscScalar pertmag = shell->epsilon_calc(shell->uvec, z);
 				Vec uvec_Lpert,rvec_L;
@@ -1250,13 +1251,17 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 					}
 					idx[k] = row;
-					
 				}
 				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
 				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 
 				// ############## Get x_i and store it in tempvec ######################
 				ierr = VecGetValues(x,nvars,idx,tempelem);CHKERRQ(ierr); 
+
+				for (int k = 0; k < nvars; k++)
+				{
+					idx[k] = k; //change idx coz tempvec is of the size 4
+				}
 				ierr = VecSetValues(tempvec,nvars,idx,tempelem,INSERT_VALUES);CHKERRQ(ierr);
 				ierr = VecAssemblyBegin(tempvec);CHKERRQ(ierr);
 				ierr = VecAssemblyEnd(tempvec);CHKERRQ(ierr);
@@ -1264,8 +1269,8 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				// #################    L-Loop	#####################
 				ierr = VecSet(sum,0); CHKERRQ(ierr); // Initialize sum to 0
 				for (int j = 0; j < i; j++)
-				{
-					for (int k = 0; i < nvars; i++)
+				{ //std::cout<<"i,j-------"<<i<<"  "<<j<<std::endl;
+					for (int k = 0; k < nvars; k++)
 					{
 						idx[k] = nvars*j+k;
 					}
@@ -1315,11 +1320,13 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				ierr = VecGhostUpdateEnd(rvec_U, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
 				
+				
+				
 				// #################    U-Loop	#####################
 				ierr = VecSet(sum,0);CHKERRQ(ierr); // Initialize sum to 0
-				for (int j = i+1; j < nelem; i++)
-				{
-					for (int k = 0; i < nvars; i++)
+				for (int j = i+1; j < nelem; j++)
+				{//std::cout<<"i,j-------"<<i<<"  "<<j<<std::endl;
+					for (int k = 0; k < nvars; k++)
 					{
 						idx[k] = nvars*j+k;
 					}
@@ -1336,7 +1343,20 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				}
 
 				ierr = MatMult(Dinv_i, sum, tempvec);CHKERRQ(ierr); 
-				ierr = VecAXPY(sum,-1,tempvec); CHKERRQ(ierr); // sum = z_i - Dinv_i*sum
+				ierr = VecWAXPY(sum,-1,tempvec,zelem); CHKERRQ(ierr); // sum = z_i - Dinv_i*sum
+				
+				PetscReal summax,zelemmax;
+				ierr = VecMax(sum,NULL,&summax);CHKERRQ(ierr);
+				ierr = VecMax(zelem,NULL,&zelemmax);CHKERRQ(ierr);
+				if (PetscIsNanReal(summax) || PetscIsNanReal(zelemmax))
+				{
+					writePetscObj(sum,"yelem");
+					writePetscObj(zelem,"zelem");
+					std::cout<< "i......."<<i<<std::endl;
+					writePetscObj(y,"y");
+					writePetscObj(z,"z");
+					return -1;
+				}
 
 				for (int k = 0; k < nvars; k++)
 				{
@@ -1347,9 +1367,11 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 				ierr = VecAssemblyBegin(y);CHKERRQ(ierr);
 				ierr = VecAssemblyEnd(y);CHKERRQ(ierr);
 				
-
+				
 			}
-
+			writePetscObj(y,"y");
+			writePetscObj(z,"z");
+			return -1;
 			ierr = VecWAXPY(diff,-1.0,y,yold);CHKERRQ(ierr);
 			ierr = VecNorm(diff,NORM_2,&nrm);CHKERRQ(ierr);
 			std::cout<<nrm<<"nrm"<<std::endl;
