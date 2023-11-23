@@ -178,6 +178,8 @@ public:
 	template<int nvars>
 	PetscErrorCode mf_pc_apply2(PC pc, const Vec x, Vec y);
 	template<int nvars>
+	PetscErrorCode mf_pc_apply3(PC pc, Vec x, Vec y);
+	template<int nvars>
 	PetscErrorCode mf_pc_destroy(PC pc);
 
 	PetscErrorCode mf_lusgs(Vec x, Vec y);
