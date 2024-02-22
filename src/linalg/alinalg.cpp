@@ -962,207 +962,139 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 
 	
-	# if 0
+	# if 1
 	template<int nvars>
 	PetscErrorCode mf_pc_apply1(PC pc,const Vec x, Vec y)
 	{
+		/**
+		 * @brief Main scheme is: (D+L)Dinv(D+U)y = x; 
+		 * y is the preconditioned vector.
+		 * x is the non-preconditioned vector.
+		 * 
+		 * Matrix-vector products are applied as follows:
+		 * (D+L)v = (R_L(u+\epsilon/||v||_2 * v) - R_L(u))/(\epsilon/||v||_2)
+		 * (D+U)v = (R_R(u+\epsilon/||v||_2 * v) - R_R(u))/(\epsilon/||v||_2)
+		 *
+		 * where v is some vector. 
+		 * R_L is the residual calculated by equating the fluxes from right side elem = 0
+		 * R_R is the residual calculated by equating the fluxes from left side elem = 0
+		 */
+		
 		StatusCode ierr = 0;
 		MatrixFreePreconditioner<nvars> *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
+
+		PetscScalar epsilon = 1e-6;
+
+		Vec z;
+		ierr = VecDuplicate(shell->uvec,&z);CHKERRQ(ierr); 
+
+
+		/**
+		 * @brief Left sweep is done first.
+		 * (D+L)z = x; 	Dinv(D+U)y = z. 
+		 * Here, we will take care of solving (D+L)z = x
+		 * 
+		 * An iterative can be written as: 
+		 * z^{k+1} = Dinv(x-Lz^{k})
+		 * 
+		 * which can be written as:
+		 * z^{k+1} = z^{k} + Dinv(x-(D+L)z^{k})
+		 */
 		
-		Vec sum, temp;
-		ierr = VecCreate(PETSC_COMM_SELF, &sum);CHKERRQ(ierr);
-		ierr = VecSetType(sum, VECMPI);CHKERRQ(ierr);
-		ierr = VecSetSizes(sum, nvars, PETSC_DECIDE);CHKERRQ(ierr);
-		ierr = VecDuplicate(sum,&temp);CHKERRQ(ierr);
-		ierr = VecSet(sum,0);CHKERRQ(ierr);
+		Vec r_orig, r_pert, u_pert, temp;
+		ierr = VecDuplicate(shell->uvec,&r_orig);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&r_pert);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&u_pert);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&temp);CHKERRQ(ierr);
+		ierr = VecSet(z,1.);CHKERRQ(ierr);// Initial guess for z. NEVER SET TO 0.
 
-		Vec yst; 
-		ierr = VecDuplicate(shell->uvec,&yst);CHKERRQ(ierr);
-		ierr = VecCopy(x,yst);CHKERRQ(ierr); // initialize yst
-		ierr = VecCopy(x,y);CHKERRQ(ierr); // initialize y
+		ierr = shell->space->compute_residual(shell->uvec, r_orig, false, NULL); CHKERRQ(ierr); //Residual from left elements only.
+		//ierr = shell->space->compute_residual_LU(shell->uvec, r_orig, 1); CHKERRQ(ierr); //Residual from left elements only.
+		ierr = VecGhostUpdateBegin(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
-		Mat Dinv_i;  //MatType type;
-		ierr = MatCreateSeqAIJ(PETSC_COMM_WORLD, shell->blk_size, shell->blk_size, 0, NULL, &Dinv_i);CHKERRQ(ierr);
-		ierr = MatSetOption(Dinv_i, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);CHKERRQ(ierr);
+		PetscScalar tol = 1e-3; //Left sweep solved until the ||z^{k+1}-z^{k}||_2 <= 1e-3.
+		PetscScalar nrm = 10.; //Initial value of the norm.
 
-		Vec dummy = NULL;
+		while (nrm > tol)
+		{	
+			PetscScalar znrm; 
+			ierr = VecNorm(z,NORM_2,&znrm);CHKERRQ(ierr);
+			PetscScalar pertmag = epsilon/znrm;
 
-		if(!(shell->space))
-			SETERRQ(PETSC_COMM_SELF, PETSC_ERR_POINTER,
-					"Spatial context not set!");
+			ierr = VecWAXPY(u_pert,pertmag,z,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + pertmag*z 
 
-		const UMesh<freal,NDIM> *const m = shell->space->mesh();
-		//ierr = VecSet(y, 0.0); CHKERRQ(ierr);
+			ierr = shell->space->compute_residual(u_pert, r_pert, false, NULL); CHKERRQ(ierr); //Residual from left elements only with state vec u_pert.
+			//ierr = shell->space->compute_residual_LU(u_pert, r_pert, 1); CHKERRQ(ierr); //Residual from left elements only with state vec u_pert.
+			ierr = VecGhostUpdateBegin(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
-		Vec auxl, rfd_l,auxu,rfd_u;
-		ierr = VecDuplicate(shell->uvec, &auxl); CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->rvec, &rfd_l); CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->uvec, &auxu); CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->rvec, &rfd_u); CHKERRQ(ierr);
+			ierr = VecAXPY(r_pert,-1.0,r_orig);CHKERRQ(ierr); // r_pert = r_pert - r_orig
+			ierr = VecScale(r_pert,1./pertmag);CHKERRQ(ierr); // r_pert = r_pert/pertmag = (r_pert - rL)/pertmag
 
-		PetscScalar xnorm = 0;
-		ierr = VecNorm(x, NORM_2, &xnorm); CHKERRQ(ierr);
+			// x - (D+L)z = x - (r_pert - r_orig)/pertmag. Stored in r_pert
+			ierr = VecAYPX(r_pert,-1.0,x);CHKERRQ(ierr); // r_pert = x - r_pert
 
-	#ifdef DEBUG
-		if(xnorm < 10.0*std::numeric_limits<freal>::epsilon())
-			SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FP,
-					"Norm of offset is too small for finite difference Jacobian!");
-	#endif
+			// temp = Dinv(r_pert) = Dinv(x-(D+L)z)
+			ierr = MatMult(shell->Dinv, r_pert, temp);CHKERRQ(ierr); // temp = Dinv(r_pert)
 
-		for (fint iel = 0; iel < m->gnelem()*nvars; iel++) 
-		{
-				PetscInt row,col;
-				PetscScalar va;
-				// set up Dinv matrix for the current element
-				for (PetscInt k = 0; k < nvars; k++)
-				{
-					 row = iel*nvars+k;
-					
-					for (PetscInt l = 0; l < nvars; l++)
-					{
-						col = iel*nvars+l;
-						
-						ierr = MatGetValue(shell->Dinv, row, col, &va); CHKERRQ(ierr); 
-						ierr = MatSetValue(Dinv_i,k,l,va,INSERT_VALUES); CHKERRQ(ierr); 
-						//std::cout<<"--"<<row<<col<<std::endl;
+			// z = z + temp = z + Dinv(x-(D+L)z)
+			ierr = VecAXPY(z,1.0,temp);CHKERRQ(ierr); // z = z + temp
 
-					}
-					
-				}				
-		
-				ierr = MatAssemblyBegin(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr); 
-				ierr = MatAssemblyEnd(Dinv_i,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-
-
-
-				const freal eps = 1e-6;
-				const freal pertmag = eps/xnorm;
-
-
-				// aux <- u + eps/xnorm * x ;    y <- 0
-				{
-					ConstVecHandler<PetscScalar> uh(shell->uvec);
-					const PetscScalar *const u_arr = uh.getArray();
-					MutableVecHandler<PetscScalar> auxh(auxl);
-					PetscScalar *const aux_l = auxh.getArray(); 
-					MutableVecHandler<PetscScalar> auxi(auxu);
-					PetscScalar *const aux_u = auxi.getArray();
-					MutableVecHandler<PetscScalar> ygl(rfd_l);
-					PetscScalar *const res_l = ygl.getArray();
-					MutableVecHandler<PetscScalar> ygu(rfd_u);
-					PetscScalar *const res_u = ygu.getArray();
-					MutableVecHandler<PetscScalar> ysth(yst);
-					PetscScalar *const yst_arr = ysth.getArray();
-					MutableVecHandler<PetscScalar> ygh(y);
-					PetscScalar *const y_arr = ygh.getArray();
-
-			//#pragma omp parallel for simd default(shared)
-					for(fint i = 0; i < m->gnelem()*nvars; i++) 
-					{
-						res_l[i] = 0;
-						res_u[i] = 0;
-						aux_l[i] = u_arr[i] + pertmag * yst_arr[i];
-						aux_u[i] = u_arr[i] + pertmag * y_arr[i];
-					}
-					
-				}
-
-				// ierr = VecGhostUpdateBegin(auxl, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
-				// ierr = VecGhostUpdateEnd(auxl, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
-
-				// ierr = VecGhostUpdateBegin(auxu, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
-				// ierr = VecGhostUpdateEnd(auxu, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
-
-				// y <- -r(u + eps/xnorm * x)
-				ierr = shell->space->compute_residual(auxl, rfd_l, false, dummy); CHKERRQ(ierr);
-
-				// ierr = VecGhostUpdateBegin(rfd_l, INSERT_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-				// ierr = VecGhostUpdateEnd(rfd_l, INSERT_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-
-				ierr = shell->space->compute_residual(auxu, rfd_u, false, dummy); CHKERRQ(ierr);
-
-				// ierr = VecGhostUpdateBegin(rfd_u, INSERT_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-				// ierr = VecGhostUpdateEnd(rfd_u, INSERT_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-				
-				// y <- vol/dt x + (-(-r(u + eps/xnorm * x)) + (-r(u))) / eps |x|
-				//    = vol/dt x + (r(u + eps/xnorm * x) - r(u)) / eps |x|
-				/* We need to divide the difference by the step length scaled by the norm of x.
-				* We do NOT divide by epsilon, because we want the product of the Jacobian and x, which is
-				* the directional derivative (in the direction of x) multiplied by the norm of x.
-				*/
-				
-
-				{
-					ConstVecHandler<PetscScalar> xh(x);
-					const PetscScalar *const x_arr = xh.getArray();
-					ConstVecHandler<PetscScalar> resh(shell->rvec);
-					const PetscScalar *const res_arr = resh.getArray();
-					MutableVecHandler<PetscScalar> ygl(rfd_l);
-					PetscScalar *const res_l = ygl.getArray();
-					MutableVecHandler<PetscScalar> ygu(rfd_u);
-					PetscScalar *const res_u = ygu.getArray();
-					MutableVecHandler<PetscScalar> yi(yst);
-					PetscScalar *const yst_arr = yi.getArray();
-					MutableVecHandler<PetscScalar> yh(y);
-					PetscScalar *const y_arr = yh.getArray();
-					MutableVecHandler<PetscScalar> sumh(sum);
-					PetscScalar *const sum_l = sumh.getArray(); 
-					
-
-
-					// L-loop
-					//setting the sum to be equal to zero. 
-			//#pragma omp parallel for simd default(shared)
-					for(fint jel = 0; jel < iel; jel++)
-					{
-						for(int k = 0; k < nvars; k++) {
-							// finally, add the pseudo-time term (Vol/dt du = Vol/dt x)
-							sum_l[k] = sum_l[k] + (res_l[jel*nvars+k] - res_arr[jel*nvars+k])/pertmag;
-						}
-
-						for(int k = 0; k < nvars; k++) {
-							sum_l[k] = x_arr[jel*nvars+k] - sum_l[k]; // sum = x-\sigma_{jel=0:iel-1} (r(u+eps*x)-r(u))/eps
-						}
-					}
-
-					//Do the D^{-1}*sum
-					ierr = MatMult(Dinv_i, sum, temp);CHKERRQ(ierr);
-						for (fint k = 0; k < nvars; k++)
-						{
-							ierr = VecGetValues(temp,1,&k,&va);CHKERRQ(ierr);
-							yst_arr[iel*nvars + k] = va;
-						}
-						
-					
-
-					ierr = VecSet(sum,0);CHKERRQ(ierr);
-					MutableVecHandler<PetscScalar> sumi(sum);
-					PetscScalar *const sum_u = sumi.getArray();
-
-					// U-loop
-			//#pragma omp parallel for simd default(shared)		
-					for(fint jel = iel+1; jel < m->gnelem()*nvars; jel++)
-					{
-						for(int k = 0; k < nvars; k++) {
-							// finally, add the pseudo-time term (Vol/dt du = Vol/dt x)
-							sum_u[k] = sum_u[k]+(res_u[jel*nvars+k] - res_arr[jel*nvars+k])/pertmag;
-						}
-	
-					}
-
-					ierr = MatMult(Dinv_i, sum, temp);CHKERRQ(ierr);
-						for (fint k = 0; k < nvars; k++)
-						{
-							ierr = VecGetValues(temp,1,&k,&va);CHKERRQ(ierr);
-							y_arr[iel*nvars + k] = yst_arr[iel*nvars + k] - va;
-						}
-
-
-				}
+			ierr = VecNorm(temp,NORM_2,&nrm);CHKERRQ(ierr); // nrm = ||temp||_2 = z^{k+1} - z^{k}
 
 		}
 
+
+		/**
+		 * @brief Right sweep is done next.
+		 * (D+U)y = Dz. 
+		 * Here, we will take care of solving (D+U)y = z
+		 * 
+		 * An iteration can be written as: 
+		 * y^{k+1} = Dinv(z-Uy^{k})
+		 * 
+		 * which can be written as:
+		 * y^{k+1} = y^{k} + z-Dinv(D+U)y^{k})
+		 */
+		
+		ierr = shell->space->compute_residual(shell->uvec, r_orig, false, NULL); CHKERRQ(ierr);
+
+		//ierr = shell->space->compute_residual_LU(shell->uvec, r_orig, 2); CHKERRQ(ierr); //Residual from right elements only.
+		ierr = VecGhostUpdateBegin(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);	
+		
+		ierr = VecCopy(z,y);CHKERRQ(ierr); // y = z
+		nrm = 10.;
+		while (nrm > tol)
+		{
+			PetscScalar ynrm; 
+			ierr = VecNorm(y,NORM_2,&ynrm);CHKERRQ(ierr);
+			PetscScalar pertmag = epsilon/ynrm;
+
+			ierr = VecWAXPY(u_pert,pertmag,y,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + pertmag*y
+
+			ierr = shell->space->compute_residual(u_pert, r_pert, false, NULL); CHKERRQ(ierr);
+			//ierr = shell->space->compute_residual_LU(u_pert, r_pert, 2); CHKERRQ(ierr); //Residual from right elements only with state vec u_pert.
+			ierr = VecGhostUpdateBegin(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+			ierr = VecAXPY(r_pert,-1.0,r_orig);CHKERRQ(ierr); // r_pert = r_pert - r_orig
+			ierr = VecScale(r_pert,1./pertmag);CHKERRQ(ierr); // r_pert = r_pert/pertmag = (r_pert - rL)/pertmag
+
+			// Dinv(r_pert) = Dinv((D+U)y)
+			ierr = MatMult(shell->Dinv, r_pert, temp);CHKERRQ(ierr); // temp = Dinv(r_pert)
+
+			//temp = z-temp = z - Dinv(r_pert) = z - Dinv(D+U)y
+			ierr = VecAXPY(temp,-1.0,z);CHKERRQ(ierr); 
+
+			// y = y+temp = y + z-Dinv(D+U)y
+			ierr = VecAXPY(y,1.0,temp);CHKERRQ(ierr); // y = y + temp
+
+			ierr = VecNorm(temp,NORM_2,&nrm);CHKERRQ(ierr); // nrm = ||temp||_2 = ||y^{k+1} - y^{k}|| = ||z-Dinv(D+U)y||
+
+		}
 
 		return ierr;
 	}
