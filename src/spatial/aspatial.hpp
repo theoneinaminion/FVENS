@@ -66,6 +66,10 @@ public:
 	virtual StatusCode compute_residual(const Vec u, Vec residual,
 	                                    const bool gettimesteps, Vec dtm) const = 0;
 
+	//For the use of LU-SGS mf preconditioner
+	virtual StatusCode compute_residual_LU(const Vec u, Vec residual,
+	                            const int flag) const = 0;										
+
 	/// Computes and assembles the residual Jacobian
 	StatusCode assemble_jacobian(const Vec uvec, Mat A) const;
 	//StatusCode getLU(const Vec uvec, Mat Lmat, Mat Umat)

@@ -26,6 +26,12 @@ public:
 	                                   const bool gettimesteps, Vec dtm) const
 	{ return 0; }
 
+	//This is just to ensure no compiler warnings when using LU-SGS preconditioner
+	fvens::StatusCode compute_residual_LU(const Vec u, Vec residual,
+	                            const int flag) const {
+									return 1;
+								} ;	
+
 	void compute_local_jacobian_interior(const fint iface,
 	                                     const freal *const ul, const freal *const ur,
 	                                     Matrix<freal,1,1,RowMajor>& L,

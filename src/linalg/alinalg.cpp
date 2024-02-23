@@ -655,10 +655,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
-	shell->getLU(A);
-	
-
-	
+	//shell->getLU(A);
 	/*PetscInt m;
 	PetscInt n;
 	MatGetSize(A, &m, &n);
@@ -1000,17 +997,17 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		 * 
 		 * which can be written as:
 		 * z^{k+1} = z^{k} + Dinv(x-(D+L)z^{k})
-		 */
+		 */ 
 		
 		Vec r_orig, r_pert, u_pert, temp;
 		ierr = VecDuplicate(shell->uvec,&r_orig);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&r_pert);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&u_pert);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&temp);CHKERRQ(ierr);
-		ierr = VecSet(z,1.);CHKERRQ(ierr);// Initial guess for z. NEVER SET TO 0.
+		ierr = VecCopy(x,z);CHKERRQ(ierr);// Initial guess for z. NEVER SET TO 0.
 
-		ierr = shell->space->compute_residual(shell->uvec, r_orig, false, NULL); CHKERRQ(ierr); //Residual from left elements only.
-		//ierr = shell->space->compute_residual_LU(shell->uvec, r_orig, 1); CHKERRQ(ierr); //Residual from left elements only.
+		//ierr = shell->space->compute_residual(shell->uvec, r_orig, false, NULL); CHKERRQ(ierr); //Residual from left elements only.
+		ierr = shell->space->compute_residual_LU(shell->uvec, r_orig, 1); CHKERRQ(ierr); //Residual from left elements only.
 		ierr = VecGhostUpdateBegin(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 		ierr = VecGhostUpdateEnd(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
@@ -1021,20 +1018,24 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		{	
 			PetscScalar znrm; 
 			ierr = VecNorm(z,NORM_2,&znrm);CHKERRQ(ierr);
-			PetscScalar pertmag = epsilon/znrm;
+			PetscScalar pertmag = epsilon;//znrm;
 
 			ierr = VecWAXPY(u_pert,pertmag,z,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + pertmag*z 
 
-			ierr = shell->space->compute_residual(u_pert, r_pert, false, NULL); CHKERRQ(ierr); //Residual from left elements only with state vec u_pert.
-			//ierr = shell->space->compute_residual_LU(u_pert, r_pert, 1); CHKERRQ(ierr); //Residual from left elements only with state vec u_pert.
+
+			//ierr = shell->space->compute_residual(u_pert, r_pert, false, NULL); CHKERRQ(ierr); //Residual from left elements only with state vec u_pert.
+			ierr = shell->space->compute_residual_LU(u_pert, r_pert, 1); CHKERRQ(ierr); //Residual from left elements only with state vec u_pert.
 			ierr = VecGhostUpdateBegin(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			
 
 			ierr = VecAXPY(r_pert,-1.0,r_orig);CHKERRQ(ierr); // r_pert = r_pert - r_orig
 			ierr = VecScale(r_pert,1./pertmag);CHKERRQ(ierr); // r_pert = r_pert/pertmag = (r_pert - rL)/pertmag
-
+			
 			// x - (D+L)z = x - (r_pert - r_orig)/pertmag. Stored in r_pert
 			ierr = VecAYPX(r_pert,-1.0,x);CHKERRQ(ierr); // r_pert = x - r_pert
+
+			//writePetscObj(r_pert,"r_pert");
 
 			// temp = Dinv(r_pert) = Dinv(x-(D+L)z)
 			ierr = MatMult(shell->Dinv, r_pert, temp);CHKERRQ(ierr); // temp = Dinv(r_pert)
@@ -1043,6 +1044,9 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			ierr = VecAXPY(z,1.0,temp);CHKERRQ(ierr); // z = z + temp
 
 			ierr = VecNorm(temp,NORM_2,&nrm);CHKERRQ(ierr); // nrm = ||temp||_2 = z^{k+1} - z^{k}
+
+			std::cout<<nrm<<std::endl;
+			// return -1;
 
 		}
 
@@ -1059,9 +1063,9 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		 * y^{k+1} = y^{k} + z-Dinv(D+U)y^{k})
 		 */
 		
-		ierr = shell->space->compute_residual(shell->uvec, r_orig, false, NULL); CHKERRQ(ierr);
+		//ierr = shell->space->compute_residual(shell->uvec, r_orig, false, NULL); CHKERRQ(ierr);
 
-		//ierr = shell->space->compute_residual_LU(shell->uvec, r_orig, 2); CHKERRQ(ierr); //Residual from right elements only.
+		ierr = shell->space->compute_residual_LU(shell->uvec, r_orig, 2); CHKERRQ(ierr); //Residual from right elements only.
 		ierr = VecGhostUpdateBegin(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 		ierr = VecGhostUpdateEnd(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);	
 		
@@ -1075,8 +1079,8 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 			ierr = VecWAXPY(u_pert,pertmag,y,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + pertmag*y
 
-			ierr = shell->space->compute_residual(u_pert, r_pert, false, NULL); CHKERRQ(ierr);
-			//ierr = shell->space->compute_residual_LU(u_pert, r_pert, 2); CHKERRQ(ierr); //Residual from right elements only with state vec u_pert.
+			//ierr = shell->space->compute_residual(u_pert, r_pert, false, NULL); CHKERRQ(ierr);
+			ierr = shell->space->compute_residual_LU(u_pert, r_pert, 2); CHKERRQ(ierr); //Residual from right elements only with state vec u_pert.
 			ierr = VecGhostUpdateBegin(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
@@ -1093,6 +1097,8 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			ierr = VecAXPY(y,1.0,temp);CHKERRQ(ierr); // y = y + temp
 
 			ierr = VecNorm(temp,NORM_2,&nrm);CHKERRQ(ierr); // nrm = ||temp||_2 = ||y^{k+1} - y^{k}|| = ||z-Dinv(D+U)y||
+
+			std::cout<<nrm<<std::endl;
 
 		}
 
@@ -1527,7 +1533,7 @@ PetscErrorCode writePetscObj(Mat &A, std::string name)
 		
 
 		const std::string namefin = name + ".m";
-		PetscCall(MatView(A, PETSC_VIEWER_STDOUT_WORLD));
+		//PetscCall(MatView(A, PETSC_VIEWER_STDOUT_WORLD));
 		PetscCall(PetscPrintf(PETSC_COMM_WORLD, "writing matrix ...\n"));
 		PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, namefin.c_str(), &viewer));
 		PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));

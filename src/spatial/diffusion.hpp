@@ -82,6 +82,12 @@ public:
 	
 	void getGradients(const Vec u,
 	                  GradBlock_t<freal,NDIM,nvars> *const grads) const;
+	
+	//This is just to ensure no compiler warnings when using LU-SGS preconditioner
+	StatusCode compute_residual_LU(const Vec u, Vec residual,
+	                            const int flag) const {
+									return 1;
+								} ;				  
 
 	~DiffusionMA();
 

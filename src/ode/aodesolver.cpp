@@ -488,7 +488,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 		ierr = MatSetOption(M, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE); CHKERRQ(ierr);
 		//mfa->apply(uvec, rvec);
     //user-defined preconditioner
-	if ABFLAG {
+	if ((ABFLAG))  {
 		StatusCode ierr = 0;
 		PC pc;
 		KSPGetPC(solver,&pc);
@@ -505,7 +505,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 			PCSetType(pc, PCSHELL);
 			mf_pc_create<nvars>(&shell); // pass extra vectors etc here. 
 			mf_pc_setup<nvars>(pc, uvec, rvec, space, shell);
-			ierr = PCShellSetApply(pc,&(mf_pc_apply3<nvars>));CHKERRQ(ierr);
+			ierr = PCShellSetApply(pc,&(mf_pc_apply1<nvars>));CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,shell);CHKERRQ(ierr);
 			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy<nvars>)); CHKERRQ(ierr);
 			ierr = PCShellSetName(pc,"LUSGS matrix-occupied");CHKERRQ(ierr);

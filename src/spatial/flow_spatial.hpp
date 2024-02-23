@@ -86,6 +86,10 @@ public:
 	virtual StatusCode compute_residual(const Vec u, Vec residual,
 	                                    const bool gettimesteps, Vec timesteps) const = 0;
 
+	//For the use of LU-SGS mf preconditioner
+	virtual StatusCode compute_residual_LU(const Vec u, Vec residual,
+	                            const int flag) const = 0;									
+
 	/// Computes Cp, Csf, Cl, Cd_p and Cd_sf on one surface
 	/** \param[in] u The multi-vector containing conserved variables
 	 * \param[in] grad Gradients of converved variables at cell-centres
@@ -198,12 +202,22 @@ public:
 	 */
 	StatusCode compute_residual(const Vec u, Vec residual,
 	                            const bool gettimesteps, Vec timesteps) const;
+	
+	//For the use of LU-SGS mf preconditioner
+	StatusCode compute_residual_LU(const Vec u, Vec residual,
+	                            const int flag) const;							
 
 	/// Computes fluxes into the residual vector
 	void compute_fluxes(const scalar *const u, const scalar *const gradients,
 	                    const scalar *const uleft, const scalar *const uright,
 	                    const scalar *const ug,
 	                    scalar *const res) const;
+
+	//For the use of LU-SGS mf preconditioner
+	void compute_fluxes_LU(const scalar *const u, const scalar *const gradients,
+	                    const scalar *const uleft, const scalar *const uright,
+	                    const scalar *const ug,
+	                    scalar *const res, const int flag) const;					
 
 	/// Computes the maximum allowable time step at each cell
 	/** This is the volume of the cell divided by the integral over the cell boundary of
