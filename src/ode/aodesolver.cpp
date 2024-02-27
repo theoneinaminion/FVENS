@@ -504,7 +504,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 			PCSetType(pc, PCSHELL);
 			mf_pc_create<nvars>(&shell); // pass extra vectors etc here. 
-			mf_pc_setup<nvars>(pc, uvec, rvec, space, shell);
+			mf_pc_setup<nvars>(pc, uvec, rvec, space, shell, dtmvec);
 			ierr = PCShellSetApply(pc,&(mf_pc_apply1<nvars>));CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,shell);CHKERRQ(ierr);
 			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy<nvars>)); CHKERRQ(ierr);
@@ -513,7 +513,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 			
 			//ierr = PCView(pc,viewer);CHKERRQ(ierr);
 			//mf_pc_setup(pc,solver.A);
-			std::cout<<"yo whats up"<<std::endl;
+			//std::cout<<"yo whats up"<<std::endl;
 
 		}
 
@@ -594,7 +594,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 			tdata.convhis.push_back(convline);
 		}
 
-		if((step-1) % 10 == 0)
+		if((step-1) % 5 == 0)
 		{
 			if(mpirank == 0) {
 				writeStepToConvergenceHistory(convline, std::cout);

@@ -142,6 +142,7 @@ public:
 	Vec res; //residual vector 
 	Vec uvec; //solution vector 
 	Vec rvec; //residual vector
+	Vec mdtvec; //time step vector
 	PetscInt blk_size; 
 	PetscInt m,n; //size of matrix
 	
@@ -170,7 +171,7 @@ public:
 	template<int nvars>
 	PetscErrorCode mf_pc_create(MatrixFreePreconditioner<nvars> **shell);
 	template<int nvars>
-	PetscErrorCode mf_pc_setup(PC pc, Vec u, Vec r, const Spatial<freal,nvars> *const space, MatrixFreePreconditioner<nvars> *shell);
+	PetscErrorCode mf_pc_setup(PC pc, const Vec u, Vec r, const Spatial<freal,nvars> *const space, MatrixFreePreconditioner<nvars> *shell, const Vec dtmvec);
 	template<int nvars>
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
 	template<int nvars>
