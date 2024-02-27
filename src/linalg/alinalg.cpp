@@ -973,8 +973,8 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		 * x is the non-preconditioned vector.
 		 * 
 		 * Matrix-vector products are applied as follows:
-		 * (D+L)v = vol/dt * v + (R_L(u+\epsilon/||v||_2 * v) - R_L(u))/(\epsilon/||v||_2)
-		 * (D+U)v = vol/dt * v + (R_R(u+\epsilon/||v||_2 * v) - R_R(u))/(\epsilon/||v||_2)
+		 * (L)v = vol/dt * v + (R_L(u+\epsilon/||v||_2 * v) - R_L(u))/(\epsilon/||v||_2)
+		 * (U)v = vol/dt * v + (R_R(u+\epsilon/||v||_2 * v) - R_R(u))/(\epsilon/||v||_2)
 		 *
 		 * where v is some vector. 
 		 * R_L is the residual calculated by equating the fluxes from right side elem = 0
@@ -998,9 +998,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		 * 
 		 * An iterative can be written as: 
 		 * z^{k+1} = Dinv(x-Lz^{k})
-		 * 
-		 * which can be written as:
-		 * z^{k+1} = z^{k} + Dinv(x-(D+L)z^{k})
+		 *  
 		 */ 
 		
 		Vec r_orig, r_pert, u_pert, temp, matfreeprod, matfreeprodU;
@@ -1117,7 +1115,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 					for(int i = 0; i < nvars; i++) {
 						// finally, add the pseudo-time term (Vol/dt du = Vol/dt x)
 						mfp[iel*nvars+i] = xr[iel*nvars+i] - (dtmr[iel]*zr[iel*nvars+i]
-							+ (resp[iel*nvars+i] - reso[iel*nvars+i])/pertmag);
+							+ (resp[iel*nvars+i] - reso[iel*nvars+i])/pertmag); // x - Lz
 					}
 				}
 			}
@@ -1155,14 +1153,14 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 			//writePetscObj(r_pert,"r_pert");
 
-			// temp = Dinv(r_pert) = Dinv(x-(D+L)z)
+			// temp = Dinv(matfreeprod) = Dinv(x-Lz)
 			ierr = MatMult(shell->Dinv, matfreeprod, temp);CHKERRQ(ierr); // temp = Dinv(r_pert)
 
-			// z = z + temp = z + Dinv(x-(D+L)z)
-			ierr = VecAXPY(z,-1.0,temp);CHKERRQ(ierr); // z = z + temp
+			// z^{k+1} = temp . So, calculating the norm for this iteration
+			ierr = VecAXPY(z,-1.0,temp);CHKERRQ(ierr); // z = z - temp
 
-			ierr = VecNorm(z,NORM_2,&nrm);CHKERRQ(ierr); // nrm = ||temp||_2 = z^{k+1} - z^{k}
-			ierr = VecCopy(temp,z);CHKERRQ(ierr);
+			ierr = VecNorm(z,NORM_2,&nrm);CHKERRQ(ierr); // nrm =  z^{k+1} - z^{k}
+			ierr = VecCopy(temp,z);CHKERRQ(ierr); //z^{k+1} = temp
 			
 			// if (it > 150) {
 			// 	return -1;
@@ -1180,9 +1178,6 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		 * 
 		 * An iteration can be written as: 
 		 * y^{k+1} = Dinv(z-Uy^{k})
-		 * 
-		 * which can be written as:
-		 * y^{k+1} = y^{k} + z-Dinv(D+U)y^{k})
 		 */
 		
 		//ierr = shell->space->compute_residual(shell->uvec, r_orig, false, NULL); CHKERRQ(ierr);
@@ -1279,7 +1274,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 					for(int i = 0; i < nvars; i++) {
 						// finally, add the pseudo-time term (Vol/dt du = Vol/dt x)
 						mfp[iel*nvars+i] = dtmr[iel]*yr[iel*nvars+i]
-							+ (resp[iel*nvars+i] - reso[iel*nvars+i])/pertmag;
+							+ (resp[iel*nvars+i] - reso[iel*nvars+i])/pertmag; //matfreeprodU = Uy
 					}
 				}
 			}
@@ -1290,18 +1285,18 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			//ierr = VecAXPY(r_pert,-1.0,r_orig);CHKERRQ(ierr); // r_pert = r_pert - r_orig
 			//ierr = VecScale(r_pert,1./pertmag);CHKERRQ(ierr); // r_pert = r_pert/pertmag = (r_pert - rL)/pertmag
 
-			// Dinv(r_pert) = Dinv((D+U)y)
+			// Dinv(matfreeprodU) = Dinv((U)y)
 			ierr = MatMult(shell->Dinv, matfreeprodU, temp);CHKERRQ(ierr); // temp = Dinv(matfreeprodU)
 
-			//temp = z-temp = z - Dinv(r_pert) = z - Dinv(D+U)y
+			//temp = z-temp =  z - Dinv(U)y
 			ierr = VecAXPY(temp,-1.0,z);CHKERRQ(ierr); 
 
-			// y = y+temp = y + z-Dinv(D+U)y
-			ierr = VecAXPY(y,-1.0,temp);CHKERRQ(ierr); // y = y + temp
+			// y^{k+1} = temp. So, calculating the norm. 
+			ierr = VecAXPY(y,-1.0,temp);CHKERRQ(ierr); // y = y - temp
 
-			ierr = VecNorm(y,NORM_2,&nrm);CHKERRQ(ierr); // nrm = ||temp||_2 = ||y^{k+1} - y^{k}|| = ||z-Dinv(D+U)y||
+			ierr = VecNorm(y,NORM_2,&nrm);CHKERRQ(ierr); // nrm = ||y^{k+1} - y^{k}|| 
 
-			ierr = VecCopy(temp,y); CHKERRQ(ierr);
+			ierr = VecCopy(temp,y); CHKERRQ(ierr); // y = temp
 
 			
 
