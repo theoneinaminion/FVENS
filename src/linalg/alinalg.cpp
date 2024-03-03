@@ -1593,158 +1593,118 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	PetscErrorCode mf_pc_apply2<1>(PC pc, const Vec x, Vec y);
 
 	template<int nvars>
-	PetscErrorCode mf_pc_apply3(PC pc, Vec x, Vec y){
+	PetscErrorCode mf_pc_apply3(PC pc, Vec x, Vec y)
+	{
 
 		//Checking whether M*randomvec is the same when applied using matrices and matrix free. 
-
+		//std::cout<<"mfpcapply3"<<std::endl;
 		int ierr = 0;
 		MatrixFreePreconditioner<nvars> *shell;
+
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
-		int nelem = (shell->n)/nvars;
 
-		//(D+L)D^{-1}(D+U) applies using matrices
-		Vec v, tempvec, matdepres, diff, matfreeres; 
-		ierr = VecDuplicate(shell->uvec,&v);CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->uvec,&tempvec);CHKERRQ(ierr); 
-		ierr = VecDuplicate(shell->uvec,&matdepres);CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->uvec,&matfreeres);CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->uvec,&diff);CHKERRQ(ierr); // difference between matdepres and matfreeres
-		init_rand(v); // random vector v
+		//PetscScalar epsilon = 1e-6;
 
-		PetscReal nrm;
-		ierr = VecNorm(v,NORM_2,&nrm);CHKERRQ(ierr);
-		std::cout<<"v nrm------"<<nrm<<std::endl;
-
-		Mat A, tempmat;
-		ierr= PCGetOperators(pc,NULL,&A);CHKERRQ(ierr);
-		ierr = MatDuplicate(A,MAT_DO_NOT_COPY_VALUES,&(tempmat)); CHKERRQ(ierr);
-		ierr = MatAXPY(shell->Umat,1,shell->D, SAME_NONZERO_PATTERN); CHKERRQ(ierr); //(D+U)
-		ierr = MatAXPY(shell->Lmat,1,shell->D, SAME_NONZERO_PATTERN); CHKERRQ(ierr); //(D+L)
-
-		//matdepres = (D+U)*v
-		ierr = MatMult(shell->Umat,v,matdepres); CHKERRQ(ierr);
-
-		//tempvec = D^{-1}*matdepres
-		ierr = MatMult(shell->Dinv,matdepres,tempvec); CHKERRQ(ierr);
-
-		//matdepres = (D+L)*tempvec
-		ierr = MatMult(shell->Lmat,tempvec,matdepres); CHKERRQ(ierr);
-
-
-		//Initiate the mat-free computation of the above result. 
-
-		//matfreeres = (D+U)*v
-		ierr = VecSet(matfreeres,0); CHKERRQ(ierr);// Initializing matfreeres to 0. Just to be sure
-		Vec rpert;
-		ierr = VecDuplicate(shell->uvec,&rpert);CHKERRQ(ierr);
-		PetscScalar pertmag = shell->epsilon_calc(shell->uvec, v);
-		pertmag = 1;
-		ierr = VecWAXPY(tempvec,pertmag,v,shell->uvec);CHKERRQ(ierr);
-		shell->space->compute_residual(tempvec, rpert, false, NULL); CHKERRQ(ierr);
-		ierr = VecGhostUpdateBegin(rpert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-		ierr = VecGhostUpdateEnd(rpert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-
-		for (int i = 0; i < nelem; i++)
-		{
-			
-			PetscInt idx[nvars];
-			PetscScalar relem[nvars], relem_pert[nvars], sum[nvars], val;
-
-			for (int k = 0; k < nvars; k++)
-			{
-				sum[k] = 0.0;
-			}
-			
-			for (int j = i; j < nelem; j++)
-			{
-				for (int k = 0; k < nvars; k++)
-				{
-					idx[k] = nvars*j+k;
-				}
-				
-				ierr = VecGetValues(shell->rvec,nvars,idx,relem);CHKERRQ(ierr);
-				ierr = VecGetValues(rpert,nvars,idx,relem_pert);CHKERRQ(ierr);
-
-				for (int k = 0; k < nvars; k++)
-				{
-					val = (relem_pert[k]-relem[k])/pertmag;
-					sum[k] = sum[k]+val;
-				}
-				
-			}
-
-
-			for (int k = 0; k < nvars; k++)
-			{
-				idx[k] = nvars*i+k;
-			}
-			ierr = VecSetValues(matfreeres,nvars, idx,sum,INSERT_VALUES);CHKERRQ(ierr); 
-
-			
-		}
-		ierr = VecAssemblyBegin(matfreeres);CHKERRQ(ierr);
-		ierr = VecAssemblyEnd(matfreeres);CHKERRQ(ierr);
-
-		//tempvec = D_inv*matfreeres
-		ierr = MatMult(shell->Dinv,matfreeres,tempvec); CHKERRQ(ierr);
-
-		//matfreeres = (D+L)*tempvec
-
-		pertmag = shell->epsilon_calc(shell->uvec, tempvec);
-		pertmag = 1;
-		ierr = VecWAXPY(matfreeres,pertmag,tempvec,shell->uvec);CHKERRQ(ierr);
-		shell->space->compute_residual(matfreeres, rpert, false, NULL); CHKERRQ(ierr);
-		ierr = VecGhostUpdateBegin(rpert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-		ierr = VecGhostUpdateEnd(rpert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-
-
-		for (int i = 0; i < nelem; i++)
-		{
-			
-			PetscInt idx[nvars];
-			PetscScalar relem[nvars], relem_pert[nvars], sum[nvars], val;
-
-			for (int k = 0; k < nvars; k++)
-			{
-				sum[k] = 0.0;
-			}
-			
-			for (int j = 0; j <= i; j++)
-			{
-				for (int k = 0; k < nvars; k++)
-				{
-					idx[k] = nvars*j+k;
-				}
-				
-				ierr = VecGetValues(shell->rvec,nvars,idx,relem);CHKERRQ(ierr);
-				ierr = VecGetValues(rpert,nvars,idx,relem_pert);CHKERRQ(ierr);
-
-				for (int k = 0; k < nvars; k++)
-				{
-					val = (relem_pert[k]-relem[k])/pertmag;
-					sum[k] = sum[k]+val;
-				}
-				
-			}
-
-
-			for (int k = 0; k < nvars; k++)
-			{
-				idx[k] = nvars*i+k;
-			}
-			ierr = VecSetValues(matfreeres,nvars, idx,sum,INSERT_VALUES);CHKERRQ(ierr); 
-
-			
-		}
-		ierr = VecAssemblyBegin(matfreeres);CHKERRQ(ierr);
-		ierr = VecAssemblyEnd(matfreeres);CHKERRQ(ierr);
-
-		ierr = VecWAXPY(diff,-1.0,matdepres,matfreeres);CHKERRQ(ierr);
-		ierr = VecNorm(diff,NORM_2,&nrm);CHKERRQ(ierr);
+		Vec z;
+		ierr = VecDuplicate(shell->uvec,&z);CHKERRQ(ierr); 
 		
-		std::cout<<"nrm------"<<nrm<<std::endl;
-		return -1;
-		return 0;
+		Vec r_orig, r_orig2, r_pert, u_pert, temp, matfreeprod, matfreeprodU;
+		ierr = VecDuplicate(shell->uvec,&r_orig);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&r_orig2);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&r_pert);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&u_pert);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&matfreeprod);CHKERRQ(ierr); // the time term.
+		ierr = VecDuplicate(shell->uvec,&matfreeprodU);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&temp);CHKERRQ(ierr);
+
+		ierr = VecCopy(x,z);CHKERRQ(ierr);// Initial guess for z. NEVER SET TO 0.
+		ierr = VecCopy(x,y);CHKERRQ(ierr);// Initial guess for y. NEVER SET TO 0.
+
+		//#######
+		ierr = VecSet(r_orig,0);CHKERRQ(ierr);
+		ierr = VecSet(r_orig2,0);CHKERRQ(ierr);
+	
+
+		//ierr = shell->space->compute_residual(shell->uvec, r_orig, false, NULL); CHKERRQ(ierr); //Residual from left elements only.
+		ierr = shell->space->compute_residual_LU(shell->uvec, r_orig, 1); CHKERRQ(ierr); //Residual from left elements only.
+		ierr = VecGhostUpdateBegin(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+		ierr = shell->space->compute_residual_LU(shell->uvec, r_orig2, 2); CHKERRQ(ierr); //Residual from left elements only.
+		ierr = VecGhostUpdateBegin(r_orig2, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(r_orig2, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+
+		PetscScalar tol = 1e-3;
+		PetscScalar nrm = 10.;
+		int it = 0;
+		int blu = 1;
+		while ((nrm>tol) && (it <=300))
+		{
+			it = it+1;
+			PetscScalar znrm;
+			ierr = VecNorm(z,NORM_2,&znrm);CHKERRQ(ierr);
+			PetscScalar pertmag = shell->epsilon_calc(shell->uvec,z);///znrm;
+
+			ierr = VecSet(u_pert,0);CHKERRQ(ierr);
+			ierr = VecSet(r_pert,0);CHKERRQ(ierr);
+			ierr = VecSet(matfreeprod,0);CHKERRQ(ierr);
+
+			ierr = VecWAXPY(u_pert,pertmag,z,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + pertmag*z
+
+			ierr = shell->space->compute_residual_LU(u_pert, r_pert, 1); CHKERRQ(ierr); //Residual from left elements only with state vec u_pert.
+			ierr = VecGhostUpdateBegin(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+			ierr = VecAXPY(r_pert,-1,r_orig);CHKERRQ(ierr); // r_pert = r_pert - r_orig
+			ierr = VecScale(r_pert,1./pertmag);CHKERRQ(ierr); // r_pert = r_pert/pertmag = (r_pert - rL)/pertmag
+
+			ierr = VecAYPX(r_pert,-1.0,x);CHKERRQ(ierr); // r_pert = x - r_pert
+
+			ierr = MatMult(shell->Dinv, r_pert, temp);CHKERRQ(ierr); // temp = Dinv(r_pert)
+
+			
+			ierr = VecCopy(temp,z);CHKERRQ(ierr); //z^{k+1} = temp
+
+
+			//Now solving the second equation.
+			//#####################################################################
+
+			ierr = VecSet(u_pert,0);CHKERRQ(ierr);
+			ierr = VecSet(r_pert,0);CHKERRQ(ierr);
+
+			PetscScalar ynrm;
+			ierr = VecNorm(y,NORM_2,&ynrm);CHKERRQ(ierr);
+			pertmag = shell->epsilon_calc(shell->uvec,y);///ynrm;
+			
+
+
+			ierr = VecWAXPY(u_pert,pertmag,y,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + pertmag*y
+
+			ierr = shell->space->compute_residual_LU(u_pert, r_pert, 2); CHKERRQ(ierr); //Residual from left elements only with state vec u_pert.
+			ierr = VecGhostUpdateBegin(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+			ierr = VecAXPY(r_pert,-1,r_orig2);CHKERRQ(ierr); // r_pert = r_pert - r_orig
+			ierr = VecScale(r_pert,1./pertmag);CHKERRQ(ierr); // r_pert = r_pert/pertmag = (r_pert - rL)/pertmag
+
+			ierr = MatMult(shell->Dinv, r_pert, temp);CHKERRQ(ierr); // temp = Dinv(r_pert)
+			if ((it==2) && blu)
+			{
+				//writePetscObj(temp,"temp");
+				//std::cout<<"pertmag y"<<pertmag<<std::endl;
+			}
+
+			ierr = VecAXPY(temp,-1.0,z);CHKERRQ(ierr); // temp = z - temp
+
+			ierr = VecAXPY(y,-1.0,temp);CHKERRQ(ierr); // y = y - temp
+			ierr = VecNorm(y,NORM_2,&nrm);CHKERRQ(ierr); // nrm =  y^{k+1} - y^{k}
+			ierr = VecCopy(temp,y); CHKERRQ(ierr); //y^{k+1} = temp
+			std::cout<<nrm<<std::endl;
+		}	
+
+		
+		return ierr;
 
 	}
 

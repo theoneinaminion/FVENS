@@ -505,7 +505,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 			PCSetType(pc, PCSHELL);
 			mf_pc_create<nvars>(&shell); // pass extra vectors etc here. 
 			mf_pc_setup<nvars>(pc, uvec, rvec, space, shell, dtmvec);
-			ierr = PCShellSetApply(pc,&(mf_pc_apply2<nvars>));CHKERRQ(ierr);
+			ierr = PCShellSetApply(pc,&(mf_pc_apply3<nvars>));CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,shell);CHKERRQ(ierr);
 			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy<nvars>)); CHKERRQ(ierr);
 			ierr = PCShellSetName(pc,"LUSGS matrix-occupied");CHKERRQ(ierr);

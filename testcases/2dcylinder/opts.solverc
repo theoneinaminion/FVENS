@@ -1,4 +1,5 @@
 #-ksp_converged_reason
+#-start_in_debugger
 -options_left
 #-log_view
 
