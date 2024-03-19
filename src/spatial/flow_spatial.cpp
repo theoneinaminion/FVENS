@@ -1154,7 +1154,7 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 
 		/// We assemble the negative of the residual ( M du/dt + r(u) = 0).
 
-		if(flag == 1)
+		if(flag == 2)
 		{
 				for(int ivar = 0; ivar < NVARS; ivar++) {
 	#pragma omp atomic update
@@ -1167,7 +1167,7 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 				}
 			}
 		}
-		else if(flag == 2)
+		else if(flag == 1)
 		{
 				for(int ivar = 0; ivar < NVARS; ivar++) {
 	#pragma omp atomic update
