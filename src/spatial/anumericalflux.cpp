@@ -11,6 +11,7 @@
 #include <iostream>
 #include "anumericalflux.hpp"
 #include "physics/aphysics_defs.hpp"
+#include <cassert>
 
 #ifdef USE_ADOLC
 #include <adolc/adolc.h>
@@ -1414,5 +1415,102 @@ template class AUSMPlusFlux<adouble>;
 //template class HLLFlux<adouble>;
 //template class HLLCFlux<adouble>;
 #endif
+
+
+// mat-free LU-SGS fluxes
+
+template <typename scalar, typename j_real>
+void RoeFlux<scalar,j_real>::get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const
+
+{
+	scalar vi[NDIM], vni, pi,Hi;
+	physics->getVarsFromConserved(u, n, vi, vni, pi, Hi);
+
+	assert (flag==1 || flag==2);
+
+	// compute Roe-averages
+	scalar Rij,rhoij,vij[NDIM],vm2ij,vnij,Hij,cij;
+	this->getRoeAverages_LU(u,n,vi,Hi,Rij,rhoij,vij,vm2ij,vnij,Hij,cij);
+
+	// eigenvalues
+	scalar l[NVARS];
+	l[0] = fabs(vnij-cij);
+	for(int j = 1; j < NDIM+1; j++)
+		l[j] = fabs(vnij);
+	l[NDIM+1] = fabs(vnij+cij);
+
+	// Harten entropy fix
+	const scalar delta = fixeps*cij;
+	for(int ivar = 0; ivar < NVARS; ivar++)
+	{
+		if(l[ivar] < delta)
+			l[ivar] = (l[ivar]*l[ivar] + delta*delta)/(2.0*delta);
+	}
+
+	//> A_Roe * dU
+
+	scalar devn = 0., dep=0., derho=0.;
+	if(flag==1)
+	{
+		devn = -vni, dep = -pi, derho = -u[0];
+	}
+
+	if(flag==2)
+	{
+		devn = vni, dep = pi, derho = u[0];
+	}		
+
+	scalar adu[NVARS];
+
+	// product of eigenvalues and wave strengths
+	scalar lalpha[NVARS];
+	lalpha[0] = l[0]*(dep-rhoij*cij*devn)/(2.0*cij*cij);
+	lalpha[1] = l[1]*(derho - dep/(cij*cij));
+	lalpha[2] = l[1]*rhoij;
+	lalpha[3] = l[3]*(dep+rhoij*cij*devn)/(2.0*cij*cij);
+
+	// un-c:
+	adu[0] = lalpha[0];
+	adu[1] = lalpha[0]*(vij[0]-cij*n[0]);
+	adu[2] = lalpha[0]*(vij[1]-cij*n[1]);
+	adu[3] = lalpha[0]*(Hij-cij*vnij);
+
+	// un:
+
+	if(flag==1)
+	{
+		adu[0] += lalpha[1];
+		adu[1] += lalpha[1]*vij[0] +      lalpha[2]*(-vi[0] - devn*n[0]);
+		adu[2] += lalpha[1]*vij[1] +      lalpha[2]*(-vi[1] - devn*n[1]);
+		adu[3] += lalpha[1]*vm2ij/2.0 + lalpha[2] *(vij[0]*(-vi[0]) +vij[1]*(-vi[1]) -vnij*devn);
+	}
+
+	if(flag==2)
+	{
+		adu[0] += lalpha[1];
+		adu[1] += lalpha[1]*vij[0] +      lalpha[2]*(vi[0] - devn*n[0]);
+		adu[2] += lalpha[1]*vij[1] +      lalpha[2]*(vi[1] - devn*n[1]);
+		adu[3] += lalpha[1]*vm2ij/2.0 + lalpha[2] *(vij[0]*(vi[0]) +vij[1]*(vi[1]) -vnij*devn);
+	}	
+
+	// un+c:
+	adu[0] += lalpha[3];
+	adu[1] += lalpha[3]*(vij[0]+cij*n[0]);
+	adu[2] += lalpha[3]*(vij[1]+cij*n[1]);
+	adu[3] += lalpha[3]*(Hij+cij*vnij);
+
+	// get one-sided flux vectors
+	scalar fi[NVARS];
+	physics->getDirectionalFlux(u,n,vni,pi,fi);
+	
+	// finally compute fluxes
+	for(int ivar = 0; ivar < NVARS; ivar++)
+		flux[ivar] = 0.5*(fi[ivar] - adu[ivar]);
+}
+
+
+
+
 
 } // end namespace fvens

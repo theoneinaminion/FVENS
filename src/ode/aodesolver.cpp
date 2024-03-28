@@ -527,7 +527,7 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 		double thislinctime = (double)clock() / (double)CLOCKS_PER_SEC;
 
 		ierr = KSPSolve(solver, rvec, duvec); CHKERRQ(ierr);
-
+ //return -1;
 		PetscLogDouble thisfinwtime; PetscTime(&thisfinwtime);
 		double thisfinctime = (double)clock() / (double)CLOCKS_PER_SEC;
 		linwtime += (thisfinwtime-thislinwtime); 

@@ -1128,6 +1128,16 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 		const fint relem = m->gintfac(ied,1);
 		scalar fluxes[NVARS];
 
+		// if (flag==1)
+		// {
+		// 	inviflux->get_flux_LU(&uleft[ied*NVARS], &n[0], fluxes, 1);
+		// }
+		
+		// if (flag==2)
+		// {
+		// 	inviflux->get_flux_LU(&uright[ied*NVARS], &n[0], fluxes, 2);
+		// }
+		
 		inviflux->get_flux(&uleft[ied*NVARS], &uright[ied*NVARS], &n[0], fluxes);
 
 		// integrate over the face
@@ -1154,7 +1164,7 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 
 		/// We assemble the negative of the residual ( M du/dt + r(u) = 0).
 
-		if(flag == 2)
+		if(flag==2)
 		{
 				for(int ivar = 0; ivar < NVARS; ivar++) {
 	#pragma omp atomic update

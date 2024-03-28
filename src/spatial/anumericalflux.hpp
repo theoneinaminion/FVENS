@@ -44,6 +44,10 @@ public:
 	                          const j_real *const n,
 	                          j_real *const dfdl, j_real *const dfdr) const = 0;
 
+	// for mat-free LU-SGS
+	virtual void get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const = 0;	
+
 	virtual ~InviscidFlux();
 
 protected:
@@ -81,6 +85,14 @@ public:
 	void get_jacobian_2(const j_real *const ul, const j_real *const ur, const j_real* const n,
 			j_real *const dfdl, j_real *const dfdr) const;
 
+	// for mat-free LU-SGS
+	void get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const
+				  {
+					int a = 0;
+					a = a+1;
+				  };	
+
 protected:
 	using InviscidFlux<scalar,j_real>::physics;
 	using InviscidFlux<scalar,j_real>::jphy;
@@ -99,6 +111,14 @@ public:
 	              scalar *const flux) const;
 	void get_jacobian(const j_real *const ul, const j_real *const ur, const j_real* const n,
 	                  j_real *const dfdl, j_real *const dfdr) const;
+
+	// for mat-free LU-SGS
+	void get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const 
+				  {
+					int a = 0;
+					a = a+1;
+				  };	
 
 protected:
 	using InviscidFlux<scalar,j_real>::physics;
@@ -128,6 +148,14 @@ public:
 	 */
 	void get_jacobian(const j_real *const ul, const j_real *const ur, const j_real* const n,
 	                  j_real *const dfdl, j_real *const dfdr) const;
+	
+	// for mat-free LU-SGS
+	void get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const
+				   {
+					int a = 0;
+					a = a+1;
+				  };	
 
 protected:
 	using InviscidFlux<scalar,j_real>::physics;
@@ -148,6 +176,14 @@ public:
 
 	void get_jacobian(const j_real *const ul, const j_real *const ur, const j_real* const n,
 			j_real *const dfdl, j_real *const dfdr) const;
+	
+	// for mat-free LU-SGS
+	void get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const
+				   {
+					int a = 0;
+					a = a+1;
+				  };	
 
 protected:
 	using InviscidFlux<scalar,j_real>::physics;
@@ -165,7 +201,10 @@ public:
 	                      scalar *const flux) const = 0;
 	virtual void get_jacobian(const j_real *const ul, const j_real *const ur, const j_real* const n,
 	                          j_real *const dfdl, j_real *const dfdr) const = 0;
-
+	
+	// for mat-free LU-SGS
+	virtual void get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const = 0;
 protected:
 	using InviscidFlux<scalar,j_real>::physics;
 	using InviscidFlux<scalar,j_real>::jphy;
@@ -183,6 +222,22 @@ protected:
 		for(int i = 0; i < NDIM; i++)
 			vij[i] = (Rij*vj[i] + vi[i])/(Rij + 1.0);
 		Hij = (Rij*Hj + Hi)/(Rij + 1.0);
+		vm2ij = dimDotProduct(vij,vij);
+		vnij = dimDotProduct(vij,n);
+		cij = sqrt( (g-1.0)*(Hij - vm2ij*0.5) );
+	}
+
+	
+	void getRoeAverages_LU(const scalar ul[NVARS], const scalar n[NDIM],
+	                    const scalar vi[NDIM], const scalar Hi,
+	                    scalar& Rij, scalar& rhoij, scalar vij[NDIM],
+	                    scalar &vm2ij, scalar& vnij, scalar& Hij, scalar& cij) const
+	{
+		Rij = 0;
+		rhoij = Rij*ul[0];
+		for(int i = 0; i < NDIM; i++)
+			vij[i] = (vi[i]);
+		Hij = (Hi);
 		vm2ij = dimDotProduct(vij,vij);
 		vnij = dimDotProduct(vij,n);
 		cij = sqrt( (g-1.0)*(Hij - vm2ij*0.5) );
@@ -223,6 +278,13 @@ public:
 	void get_jacobian(const j_real *const ul, const j_real *const ur, const j_real* const n,
 	                  j_real *const dfdl, j_real *const dfdr) const;
 
+	// for mat-free LU-SGS
+	void get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const;
+		// {
+		// 	int a = 0;
+		// 	a = a+1;
+		// };	
 protected:
 	using InviscidFlux<scalar,j_real>::physics;
 	using InviscidFlux<scalar,j_real>::jphy;
@@ -255,6 +317,14 @@ public:
 	 */
 	void get_jacobian(const j_real *const ul, const j_real *const ur, const j_real* const n,
 	                  j_real *const dfdl, j_real *const dfdr) const;
+	
+	// for mat-free LU-SGS
+	void get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const
+				   {
+					int a = 0;
+					a = a+1;
+				  };	
 
 protected:
 	using InviscidFlux<scalar,j_real>::physics;
@@ -284,6 +354,14 @@ public:
 	 */
 	void get_jacobian(const j_real *const ul, const j_real *const ur, const j_real* const n,
 	                  j_real *const dfdl, j_real *const dfdr) const;
+
+	// for mat-free LU-SGS
+	void get_flux_LU(const scalar *const u, const scalar* const n,
+	              scalar *const flux, const int flag) const
+				   {
+					int a = 0;
+					a = a+1;
+				  };				  
 
 protected:
 	using InviscidFlux<scalar,j_real>::physics;

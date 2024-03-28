@@ -659,7 +659,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 	
-	shell->getLU(A);
+	//shell->getLU(A);
 	/*PetscInt m;
 	PetscInt n;
 	MatGetSize(A, &m, &n);
@@ -989,24 +989,25 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		PetscScalar tol=1e-3;
 		while ((nrm > tol)&&(it <= 300))
 		{	
+			it = it+1;
 			//Adding the time term
-			const UMesh<freal,NDIM> *const m = shell->space->mesh();
-			for(fint iel = 0; iel < m->gnelemglobal(); iel++)
-			{
-				PetscScalar dt;
-				ierr = VecGetValues(shell->mdtvec,1,&iel,&dt);CHKERRQ(ierr);
-				for(int i = 0; i < nvars; i++) 
-				{
-					PetscScalar val;
-					PetscInt idx = iel*nvars+i;
-					ierr = VecGetValues(y1,1,&idx,&val);CHKERRQ(ierr);
-					val = val*dt;
-					ierr = VecSetValues(temp1,1,&idx,&val,INSERT_VALUES);CHKERRQ(ierr);// Adding the time term to r_pert
-				}
-			}
-
-			ierr = MatMult(shell->Lmat,z,temp2);CHKERRQ(ierr);
-			ierr = VecAXPY(temp1,1.0,temp2);CHKERRQ(ierr); //temp1 = temp1 + temp2 = (vol/dt * y + L*z)
+			// const UMesh<freal,NDIM> *const m = shell->space->mesh();
+			// for(fint iel = 0; iel < m->gnelemglobal(); iel++)
+			// {
+			// 	PetscScalar dt;
+			// 	ierr = VecGetValues(shell->mdtvec,1,&iel,&dt);CHKERRQ(ierr);
+			// 	for(int i = 0; i < nvars; i++) 
+			// 	{
+			// 		PetscScalar val;
+			// 		PetscInt idx = iel*nvars+i;
+			// 		ierr = VecGetValues(y1,1,&idx,&val);CHKERRQ(ierr);
+			// 		val = 0*dt;
+			// 		ierr = VecSetValues(temp1,1,&idx,&val,INSERT_VALUES);CHKERRQ(ierr);// Adding the time term to r_pert
+			// 	}
+			// }
+			//#### DO NOT ADD TIME TERM ##############
+			ierr = MatMult(shell->Lmat,z,temp1);CHKERRQ(ierr);
+			//ierr = VecAXPY(temp1,1.0,temp2);CHKERRQ(ierr); //temp1 = temp1 + temp2 = (vol/dt * y + L*z)
 			ierr = VecAYPX(temp1,-1.0,x);CHKERRQ(ierr); //temp1 = x - temp1 = (x - (vol/dt * y + L*z))
 
 			ierr = MatMult(shell->Dinv,temp1,temp2);CHKERRQ(ierr); //temp2 = Dinv(temp1) = Dinv(x - (vol/dt * y + L*z))
@@ -1023,8 +1024,11 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 			//std::cout<<nrm<<std::endl;
 		}
-		
+		//std::cout<<nrm<<std::endl;
+		//std::cout<<nrm<<std::endl;
 		ierr = VecCopy(y1,y);CHKERRQ(ierr);
+		// writePetscObj(y1,"y1");
+		// return -1;
 		return ierr;
 	}
 	
@@ -1327,17 +1331,18 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		Vec z;
 		ierr = VecDuplicate(shell->uvec,&z);CHKERRQ(ierr); 
 		
-		Vec r_orig, r_orig2, r_pert, u_pert, temp, matfreeprod, matfreeprodU;
+		Vec r_orig, r_orig2, r_pert, u_pert, temp, matfreeprod, matfreeprodU,y1;
 		ierr = VecDuplicate(shell->uvec,&r_orig);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&r_orig2);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&r_pert);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&u_pert);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&y1);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&matfreeprod);CHKERRQ(ierr); // the time term.
 		ierr = VecDuplicate(shell->uvec,&matfreeprodU);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&temp);CHKERRQ(ierr);
 
 		ierr = VecCopy(x,z);CHKERRQ(ierr);// Initial guess for z. NEVER SET TO 0.
-		ierr = VecCopy(x,y);CHKERRQ(ierr);// Initial guess for y. NEVER SET TO 0.
+		ierr = VecCopy(x,y1);CHKERRQ(ierr);// Initial guess for y. NEVER SET TO 0.
 
 		//#######
 		ierr = VecSet(r_orig,0);CHKERRQ(ierr);
@@ -1379,22 +1384,22 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			ierr = VecScale(r_pert,1./pertmag);CHKERRQ(ierr); // r_pert = r_pert/pertmag = (r_pert - rL)/pertmag
 
 			//Adding the time term
-			const UMesh<freal,NDIM> *const m = shell->space->mesh();
-			for(fint iel = 0; iel < m->gnelemglobal(); iel++)
-			{
-				PetscScalar dt;
-				ierr = VecGetValues(shell->mdtvec,1,&iel,&dt);CHKERRQ(ierr);
-				for(int i = 0; i < nvars; i++) 
-				{
-					PetscScalar val;
-					PetscInt idx = iel*nvars+i;
-					ierr = VecGetValues(y,1,&idx,&val);CHKERRQ(ierr);
-					val = val*dt;
-					ierr = VecSetValues(r_pert,1,&idx,&val,ADD_VALUES);CHKERRQ(ierr);// Adding the time term to r_pert
-				}
-			}
-			ierr = VecAssemblyBegin(r_pert);CHKERRQ(ierr);
-			ierr = VecAssemblyEnd(r_pert);CHKERRQ(ierr);
+			// const UMesh<freal,NDIM> *const m = shell->space->mesh();
+			// for(fint iel = 0; iel < m->gnelemglobal(); iel++)
+			// {
+			// 	PetscScalar dt;
+			// 	ierr = VecGetValues(shell->mdtvec,1,&iel,&dt);CHKERRQ(ierr);
+			// 	for(int i = 0; i < nvars; i++) 
+			// 	{
+			// 		PetscScalar val;
+			// 		PetscInt idx = iel*nvars+i;
+			// 		ierr = VecGetValues(y,1,&idx,&val);CHKERRQ(ierr);
+			// 		val = val*dt;
+			// 		ierr = VecSetValues(r_pert,1,&idx,&val,ADD_VALUES);CHKERRQ(ierr);// Adding the time term to r_pert
+			// 	}
+			// }
+			// ierr = VecAssemblyBegin(r_pert);CHKERRQ(ierr);
+			// ierr = VecAssemblyEnd(r_pert);CHKERRQ(ierr);
 
 
 			ierr = VecAYPX(r_pert,-1.0,x);CHKERRQ(ierr); // r_pert = x - r_pert
@@ -1414,11 +1419,11 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			ierr = VecSet(r_pert,0);CHKERRQ(ierr);
 
 			PetscScalar ynrm;
-			ierr = VecNorm(y,NORM_2,&ynrm);CHKERRQ(ierr);
-			pertmag = shell->epsilon_calc(shell->uvec,y);///ynrm;
+			ierr = VecNorm(y1,NORM_2,&ynrm);CHKERRQ(ierr);
+			pertmag = shell->epsilon_calc(shell->uvec,y1)/ynrm;
 			
 
-			ierr = VecWAXPY(u_pert,pertmag,y,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + pertmag*y
+			ierr = VecWAXPY(u_pert,pertmag,y1,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + pertmag*y
 
 			ierr = shell->space->compute_residual_LU(u_pert, r_pert, 2); CHKERRQ(ierr); //Residual from left elements only with state vec u_pert.
 			ierr = VecGhostUpdateBegin(r_pert, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
@@ -1436,14 +1441,17 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 
 			ierr = VecAXPY(temp,-1.0,z);CHKERRQ(ierr); // temp = z - temp
 
-			ierr = VecAXPY(y,-1.0,temp);CHKERRQ(ierr); // y = y - temp
-			ierr = VecNorm(y,NORM_2,&nrm);CHKERRQ(ierr); // nrm =  y^{k+1} - y^{k}
-			ierr = VecCopy(temp,y); CHKERRQ(ierr); //y^{k+1} = temp
+			ierr = VecAXPY(y1,-1.0,temp);CHKERRQ(ierr); // y = y - temp
+			ierr = VecNorm(y1,NORM_2,&nrm);CHKERRQ(ierr); // nrm =  y^{k+1} - y^{k}
+			ierr = VecCopy(temp,y1); CHKERRQ(ierr); //y^{k+1} = temp
 			//ierr = VecAXPY(y,1.0,temp);CHKERRQ(ierr); // y = y + temp
-			std::cout<<nrm<<std::endl;
+			
 		}	
-
+		std::cout<<nrm<<std::endl;
+		ierr = VecCopy(y1,y);CHKERRQ(ierr);
 		
+		 writePetscObj(y1,"ymf");
+		 return -1;
 		return ierr;
 
 	}
