@@ -10,6 +10,7 @@
 #include "mesh/mesh.hpp"
 #include "spatial/aspatial.hpp"
 #include "physics/aphysics.hpp"
+#include "utilities/mpiutils.hpp"
 
 #include <petscksp.h>
 
@@ -168,19 +169,21 @@ public:
 
 
 };
-	template<int nvars>
+	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_create(MatrixFreePreconditioner<nvars> **shell);
-	template<int nvars>
+	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_setup(PC pc, const Vec u, Vec r, const Spatial<freal,nvars> *const space, MatrixFreePreconditioner<nvars> *shell, const Vec dtmvec);
-	template<int nvars>
+	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_apply(PC pc, Vec x, Vec y);
-	template<int nvars>
+	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_apply1(PC pc, const Vec x, Vec y);
-	template<int nvars>
+	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_apply2(PC pc, const Vec x, Vec y);
-	template<int nvars>
+	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_apply3(PC pc, Vec x, Vec y);
-	template<int nvars>
+	template<int nvars, typename scalar>
+	PetscErrorCode mf_pc_apply4(PC pc, Vec x, Vec y);
+	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_destroy(PC pc);
 
 	PetscErrorCode mf_lusgs(Vec x, Vec y);

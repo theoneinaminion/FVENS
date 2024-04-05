@@ -7,6 +7,6 @@
 -ksp_type fgmres
 -ksp_rtol 1e-1
 -ksp_max_it 30
--ksp_converged_reason
+#-ksp_converged_reason
 -pc_type sor
 

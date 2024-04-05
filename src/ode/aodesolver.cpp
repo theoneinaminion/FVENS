@@ -503,11 +503,11 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
   			//PetscCall(PetscViewerSetType(viewer,PETSCVIEWERASCII));
 
 			PCSetType(pc, PCSHELL);
-			mf_pc_create<nvars>(&shell); // pass extra vectors etc here. 
-			mf_pc_setup<nvars>(pc, uvec, rvec, space, shell, dtmvec);
-			ierr = PCShellSetApply(pc,&(mf_pc_apply3<nvars>));CHKERRQ(ierr);
+			mf_pc_create<nvars,freal>(&shell); // pass extra vectors etc here. 
+			mf_pc_setup<nvars,freal>(pc, uvec, rvec, space, shell, dtmvec);
+			ierr = PCShellSetApply(pc,&(mf_pc_apply4<nvars,freal>));CHKERRQ(ierr);
 			ierr = PCShellSetContext(pc,shell);CHKERRQ(ierr);
-			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy<nvars>)); CHKERRQ(ierr);
+			ierr = PCShellSetDestroy(pc,&(mf_pc_destroy<nvars,freal>)); CHKERRQ(ierr);
 			ierr = PCShellSetName(pc,"LUSGS matrix-occupied");CHKERRQ(ierr);
 			//ierr = PCShellSetSetUp(pc,&(mf_pc_setup<nvars>)); CHKERRQ(ierr); 
 			
