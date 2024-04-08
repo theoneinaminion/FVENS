@@ -1080,7 +1080,7 @@ FlowFV<scalar,secondOrderRequested,constVisc>::compute_residual_LU(const Vec uve
 	const scalar *const ug_pb = secondOrderRequested ?
 		ubcell : uface.getLocalArrayRight()+m->gPhyBFaceStart()*NVARS;
 
-	compute_fluxes_LU(uarr, gradarray, uface.getLocalArrayLeft(), uface.getLocalArrayRight(),
+	compute_fluxes_LU2(uarr, gradarray, uface.getLocalArrayLeft(), uface.getLocalArrayRight(),
 	               ug_pb, rarr, flag);
 
 	
@@ -1194,6 +1194,115 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 		
 	}
 }
+
+
+
+template<typename scalar, bool secondOrderRequested, bool constVisc>
+void FlowFV<scalar,secondOrderRequested,constVisc>
+::compute_fluxes_LU2(const scalar *const u, const scalar *const gradients,
+                 const scalar *const uleft, const scalar *const uright,
+                 const scalar *const ug,
+                 scalar *const res, const int faceID) const
+{
+	const amat::Array2dView<freal> rc(rch.getArray(), m->gnelem()+m->gnConnFace(), NDIM);
+	const GradBlock_t<scalar,NDIM,NVARS> *const grads
+		= reinterpret_cast<const GradBlock_t<scalar,NDIM,NVARS>*>(gradients);
+
+	/* Note that we don't need access to residuals of connectivity ghost cells. Each subdomain is
+	 * responsible only for residuals in its own cells while fluxes across connectivity faces are
+	 * computed twice - once by each subdomain.
+	 */
+	Eigen::Map<MVector<scalar>> residual(res, NVARS, NVARS);
+
+	// Compute fluxes.
+	/**
+	 * The integral of the spectral radius of the (one-sided analytical) flux Jacobian over
+	 * each face \f$ f_i \f$ is also computed and summed over for each cell \f$ K \f$:
+	 * \f[
+	 * \sum_{f_i \in \partial K} \int_{f_i} (|v_n| + c + \lamba_v) \mathrm{d}\gamma
+	 * \f]
+	 * so that time steps can be calculated for explicit time stepping and/or steady problems.
+	 * Note that the reconstructed state is used to compute the spectral radius.
+	 * \f$ \lambda_v \f$ is an estimate of the spectral radius of the viscous flux Jacobian, taken
+	 * from \cite{blazek}.
+	 */
+
+//#pragma omp parallel for default(shared)
+	// for(fint ied = m->gFaceStart(); ied < m->gFaceEnd(); ied++)
+	// {
+		int ied = faceID;
+		const std::array<scalar,NDIM> n = m->gnormal(ied);
+		const scalar len = m->gfacemetric(ied,NDIM);
+		const fint lelem = m->gintfac(ied,0);
+		const fint relem = m->gintfac(ied,1);
+		scalar fluxes[NVARS];
+
+		// if (flag==1)
+		// {
+		// 	inviflux->get_flux_LU(&uleft[ied*NVARS], &n[0], fluxes, 1);
+		// }
+		
+		// if (flag==2)
+		// {
+		// 	inviflux->get_flux_LU(&uright[ied*NVARS], &n[0], fluxes, 2);
+		// }
+		
+		inviflux->get_flux(&uleft[ied*NVARS], &uright[ied*NVARS], &n[0], fluxes);
+
+		// integrate over the face
+		for(int ivar = 0; ivar < NVARS; ivar++)
+			fluxes[ivar] *= len;
+
+		if(pconfig.viscous_sim)
+		{
+			const fint ibpface = ied - m->gPhyBFaceStart();
+			const bool isPhyBoun = (ied >= m->gPhyBFaceStart() && ied < m->gPhyBFaceEnd());
+			const scalar *const rcr = isPhyBoun ? &rcbp(ibpface,0) : &rc(relem,0);
+			const scalar *const ucellright
+				= isPhyBoun ? &ug[ibpface*NVARS] : &u[relem*NVARS];
+			const GradBlock_t<scalar,NDIM,NVARS>& gradright = isPhyBoun ? grads[lelem] : grads[relem];
+
+			scalar vflux[NVARS];
+			compute_viscous_flux(&n[0], &rc(lelem,0), rcr,
+			                     &u[lelem*NVARS], ucellright, grads[lelem], gradright,
+			                     &uleft[ied*NVARS], &uright[ied*NVARS], vflux);
+
+			for(int ivar = 0; ivar < NVARS; ivar++)
+				fluxes[ivar] += vflux[ivar]*len;
+		}
+
+		/// We assemble the negative of the residual ( M du/dt + r(u) = 0).
+
+		// if(flag==2)
+		// {
+				for(int ivar = 0; ivar < NVARS; ivar++) 
+				{
+	//#pragma omp atomic update
+				residual(ivar,ivar) = fluxes[ivar];
+			}
+	// 		if(relem < m->gnelem()) {
+	// 			for(int ivar = 0; ivar < NVARS; ivar++) {
+	// #pragma omp atomic update
+	// 				residual(relem,ivar) += 0; // Left elements contribution only
+	// 			}
+	// 		}
+	// 	}
+	// 	else if(flag == 1)
+	// 	{
+	// 			for(int ivar = 0; ivar < NVARS; ivar++) {
+	// #pragma omp atomic update
+	// 			residual(lelem,ivar) -= 0; //Right elements contribution only.
+	// 		}
+	// 		if(relem < m->gnelem()) {
+	// 			for(int ivar = 0; ivar < NVARS; ivar++) {
+	// #pragma omp atomic update
+	// 				residual(relem,ivar) += fluxes[ivar];
+	// 			}
+	// 		}
+	// 	}
+
+		
+	}
 
 
 template class FlowFV_base<freal>;

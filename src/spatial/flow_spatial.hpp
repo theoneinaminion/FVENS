@@ -217,8 +217,12 @@ public:
 	void compute_fluxes_LU(const scalar *const u, const scalar *const gradients,
 	                    const scalar *const uleft, const scalar *const uright,
 	                    const scalar *const ug,
-	                    scalar *const res, const int flag) const;					
+	                    scalar *const res, const int flag) const;	
 
+	void compute_fluxes_LU2(const scalar *const u, const scalar *const gradients,
+	                    const scalar *const uleft, const scalar *const uright,
+	                    const scalar *const ug,
+	                    scalar *const res, const int flag) const;
 	/// Computes the maximum allowable time step at each cell
 	/** This is the volume of the cell divided by the integral over the cell boundary of
 	 * the spectral radius of the analytical flux Jacobian.
