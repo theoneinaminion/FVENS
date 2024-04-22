@@ -50,8 +50,11 @@ public:
 
 	virtual ~InviscidFlux();
 
-protected:
 	const IdealGasPhysics<scalar> *const physics;  ///< Functionality replated to gas constitutive law
+
+
+protected:
+	//const IdealGasPhysics<scalar> *const physics;  ///< Functionality replated to gas constitutive law
 
 	/// Gas physics for Jacobian computation
 	/// This is a copy of physics above, but using scalar type.

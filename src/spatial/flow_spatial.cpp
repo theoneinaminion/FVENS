@@ -1230,11 +1230,19 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 //#pragma omp parallel for default(shared)
 	// for(fint ied = m->gFaceStart(); ied < m->gFaceEnd(); ied++)
 	// {
-		int ied = faceID;
+		int sign = 1;
+		if (faceID<0)
+		{
+			sign = -1;
+		}
+		int ied = sign*faceID;
 		const std::array<scalar,NDIM> n = m->gnormal(ied);
 		const scalar len = m->gfacemetric(ied,NDIM);
 		const fint lelem = m->gintfac(ied,0);
 		const fint relem = m->gintfac(ied,1);
+
+		
+
 		scalar fluxes[NVARS];
 
 		// if (flag==1)
@@ -1251,7 +1259,49 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 
 		// integrate over the face
 		for(int ivar = 0; ivar < NVARS; ivar++)
-			fluxes[ivar] *= len;
+		{
+			fluxes[ivar] *= len;	
+			
+		}
+
+		// const scalar *const ul = &uleft[ied*NVARS];
+		// const scalar *const ur = &uright[ied*NVARS];
+		// const scalar *const no  = &n[0];
+
+		// scalar vi[NDIM], vj[NDIM], vni, vnj, pi, pj, Hi, Hj;
+		// inviflux->physics->getVarsFromConserved(&uleft[ied*NVARS], &n[0], vi, vni, pi, Hi);
+	    // inviflux->physics->getVarsFromConserved(&uright[ied*NVARS], &n[0], vj, vnj, pj, Hj);
+
+	// compute Roe-averages
+		// scalar Rij,vij[NDIM],vm2ij,vnij,Hij,cij;
+	
+		// Rij = sqrt(ur[0]/ul[0]);
+		// //rhoij = Rij*ul[0];
+		// for(int i = 0; i < NDIM; i++)
+		// 	vij[i] = (Rij*vj[i] + vi[i])/(Rij + 1.0);
+		// Hij = (Rij*Hj + Hi)/(Rij + 1.0);
+		
+		// vm2ij = 0.;
+		// for(int i = 0; i < NDIM; i++)
+		// 	vm2ij += vij[i]*vij[i];
+		// //vm2ij = dimDotProduct(vij,vij);
+		// vnij = 0.;
+		// for(int i = 0; i < NDIM; i++)
+		// 	vnij += vij[i]*no[i];
+		// vnij = dimDotProduct(vij,no);
+		// cij = sqrt( (1.4-1.0)*(Hij - vm2ij*0.5) );
+
+		// fluxes[NVARS] = fabs(vnij+cij);// max eigen value
+
+		// std::cout<<"Rij: "<<Rij<<std::endl;
+		// std::cout<<"rhoij: "<<rhoij<<std::endl;
+		// std::cout<<"vij: "<<vij[0]<<" "<<vij[1]<<" "<<vij[2]<<std::endl;
+		// std::cout<<"Hij: "<<Hij<<std::endl;
+		// std::cout<<"vm2ij: "<<vm2ij<<std::endl;
+		// std::cout<<"vnij: "<<vnij<<std::endl;
+		// std::cout<<"cij: "<<cij<<std::endl;
+
+			
 
 		if(pconfig.viscous_sim)
 		{
@@ -1271,6 +1321,7 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 				fluxes[ivar] += vflux[ivar]*len;
 		}
 
+		//inviflux->physics->getConservedFromPrimitive(fluxes, fluxes);
 		/// We assemble the negative of the residual ( M du/dt + r(u) = 0).
 
 		// if(flag==2)
@@ -1278,8 +1329,10 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 				for(int ivar = 0; ivar < NVARS; ivar++) 
 				{
 	//#pragma omp atomic update
-				residual(ivar,ivar) = fluxes[ivar];
+				residual(ivar,ivar) = sign*fluxes[ivar];
+				
 			}
+			//residual(NVARS,NVARS-1) = fluxes[NVARS];
 	// 		if(relem < m->gnelem()) {
 	// 			for(int ivar = 0; ivar < NVARS; ivar++) {
 	// #pragma omp atomic update

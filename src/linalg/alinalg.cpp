@@ -659,7 +659,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 	
-	//shell->getLU(A);
+	shell->getLU(A);
 	/*PetscInt m;
 	PetscInt n;
 	MatGetSize(A, &m, &n);
@@ -1037,18 +1037,16 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			ierr = VecCopy(temp2,y1); //y^{k+1} = y^{k+1}-y^{k}
 
 			//std::cout<<nrm<<std::endl;
-			//  if (it==2)
-			// {	writePetscObj(y1,"y12mat");
-			// 	writePetscObj(z,"z2mat");
-			// 	return -1;
-			// }
-			// return -1;
+			 if (it==1)
+			{	writePetscObj(y1,"y1mat");
+				return -1;
+			}
+		
 		}
-		std::cout<<nrm<<std::endl;
+		//std::cout<<nrm<<std::endl;
 		//std::cout<<nrm<<std::endl;
 		ierr = VecCopy(y1,y);CHKERRQ(ierr);
-		// writePetscObj(y1,"y1");
-		// return -1;
+		
 		return ierr;
 	}
 	
@@ -1480,13 +1478,14 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			ierr = VecNorm(y1,NORM_2,&nrm);CHKERRQ(ierr); // nrm =  y^{k+1} - y^{k}
 			ierr = VecCopy(temp,y1); CHKERRQ(ierr); //y^{k+1} = temp
 			//ierr = VecAXPY(y,1.0,temp);CHKERRQ(ierr); // y = y + temp
+			writePetscObj(y1,"ymf");
+		 return -1;
 			
 		}	
 		std::cout<<nrm<<std::endl;
 		ierr = VecCopy(y1,y);CHKERRQ(ierr);
 		
-		 writePetscObj(y1,"ymf");
-		 return -1;
+		 
 		return ierr;
 
 	}
@@ -1542,7 +1541,13 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 		PetscScalar nrm = 10.;
 		PetscInt it = 0;
 		
-		
+		ierr = shell->space->compute_residual_LU(shell->uvec, r_orig, 1);
+		ierr = VecGhostUpdateBegin(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(r_orig, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
+		ierr = shell->space->compute_residual_LU(shell->uvec, r_orig2, 2);
+		ierr = VecGhostUpdateBegin(r_orig2, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(r_orig2, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			
 		while ((nrm>=tol) && (it <=300))
 		{
@@ -1553,7 +1558,8 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			PetscScalar pertmag = shell->epsilon_calc(shell->uvec,z);//znrm;
 
 			ierr = VecWAXPY(u_pert,pertmag,z,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + z
-			ierr = shell->space->compute_residual(u_pert, r_pertL, false,NULL); CHKERRQ(ierr); 
+			//ierr = shell->space->compute_residual(u_pert, r_pertL, false,NULL); CHKERRQ(ierr); 
+			ierr = shell->space->compute_residual_LU(u_pert, r_pertL, 1); CHKERRQ(ierr); 
 			ierr = VecGhostUpdateBegin(r_pertL, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(r_pertL, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
@@ -1563,7 +1569,8 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			pertmag = shell->epsilon_calc(shell->uvec,y1);///ynrm;
 
 			ierr = VecWAXPY(u_pert,pertmag,y1,shell->uvec);CHKERRQ(ierr); // u_pert =  shell->uvec + y1
-			ierr = shell->space->compute_residual(u_pert, r_pertU, false,NULL); CHKERRQ(ierr);
+			//ierr = shell->space->compute_residual(u_pert, r_pertU, false,NULL); CHKERRQ(ierr);
+			ierr = shell->space->compute_residual_LU(u_pert, r_pertU, 2); CHKERRQ(ierr);
 			ierr = VecGhostUpdateBegin(r_pertU, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(r_pertU, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
@@ -1571,9 +1578,13 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			const scalar *const xarr = xvh.getArray();
 			//Eigen::Map<MVector<const scalar>> x1(xarr, m->gnelem(), NVARS);
 
-			ConstVecHandler<scalar> rvh(shell->rvec);
+			//ConstVecHandler<scalar> rvh(shell->rvec);
+			ConstVecHandler<scalar> rvh(r_orig);
 			const scalar *const rarr = rvh.getArray();
 			//Eigen::Map<MVector<const scalar>> res(rarr, m->gnelem(), NVARS);	//original residual
+
+			ConstVecHandler<scalar> rvh2(r_orig2);
+			const scalar *const rarr2 = rvh2.getArray();
 
 			ConstVecHandler<scalar> rLvh(r_pertL);
 			const scalar *const rLarr = rLvh.getArray();
@@ -1618,7 +1629,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 					sum[j] = 0;
 				}
 
-
+				const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
 				for (int j = 0; j<nface; j++)
 				{
 					//Check for L elements
@@ -1626,15 +1637,14 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 					{
 						for(int k = 0; k<NVARS; k++)
 						{
-							sum[k] = sum[k] + (rLarr[lidx[j]*NVARS+k] - rarr[lidx[j]*NVARS+k])/pertmag; // the matrix free product
+							sum[k] = sum[k] + (rLarr[element*NVARS+k] - rarr[element*NVARS+k])/pertmag; // the matrix free product
 
 						}
 
 					}
 				}
 				PetscInt rows [NVARS]; //To get Dinv for the corresponding element
-				const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
-
+				
 				Matrix<freal,nvars,1> zcopy,zelem; //This roundabout way of defining a vector somehow works. Using Eigen::Vector gives comple errors
 				for (int j = 0; j < NVARS; j++)
 				{
@@ -1665,7 +1675,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 					{
 						for(int k = 0; k<NVARS; k++)
 						{
-							sum[k] = sum[k] + (rUarr[ridx[j]*NVARS+k] - rarr[ridx[j]*NVARS+k])/pertmag; // the matrix free product
+							sum[k] = sum[k] + (rUarr[element*NVARS+k] - rarr2[element*NVARS+k])/pertmag; // the matrix free product
 							ycopy[k] = sum[k]; //copying to multiply with Dinv
 						}
 					}
@@ -1811,7 +1821,6 @@ template<int nvars, typename scalar>
 			MutableVecHandler<scalar> up_flux(upflux);
 			scalar *const upf = up_flux.getArray();
 
-
 			//Calculate the preconditioned vector element by element..//The below for loop is correct logic. It takes care of the boundary elements/conn as well.
 			for(int i=0; i < m->gnelem(); i++)
 			{
@@ -1828,39 +1837,46 @@ template<int nvars, typename scalar>
 					
 					elem = m->gintfac(face[jface],1); //Left element corresponding to the face
 					ridx[jface] = ((elem!=i)&&(elem<m->gnelem())) ? elem : -1; //Right element. is equal to -1 if elem is equal to i 
-					//std::cout<<lidx[jface]<<" "<<ridx[jface]<<std::endl;
+					//std::cout<<face[jface]<<" "<<lidx[jface]<<" "<<ridx[jface]<<std::endl;
 					
 				}
-				
+				// if (i==10)
+				// 	return -1;
 				PetscScalar sum[NVARS]; //To store residual sums in L or U 
 
 				for(int j = 0; j<NVARS; j++)
 				{
 					sum[j] = 0;
 				}
-
+				const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
 
 				for (int j = 0; j<nface; j++)
 				{
 					//Check for L elements
 					if (lidx[j] != -1)
 					{
-						ierr = shell->space->compute_residual_LU(shell->uvec,uflux,face[j]); 
-						ierr = shell->space->compute_residual_LU(u_pertZ,upflux,face[j]); 
+						ierr = shell->space->compute_residual_LU(shell->uvec,uflux,-face[j]); 
+						ierr = VecAssemblyBegin(uflux);CHKERRQ(ierr);
+						ierr = VecAssemblyEnd(uflux);CHKERRQ(ierr); 
+						ierr = shell->space->compute_residual_LU(u_pertZ,upflux,-face[j]); 
+						ierr = VecAssemblyBegin(upflux);CHKERRQ(ierr);
+						ierr = VecAssemblyEnd(upflux);CHKERRQ(ierr); 
 						for(int k = 0; k<NVARS; k++)
 						{
 							//sum[k] = sum[k] + (rLarr[lidx[j]*NVARS+k] - rarr[lidx[j]*NVARS+k])/pertmag; // the matrix free product
 																
-							sum[k] = sum[k] + (upf[k] - uf[k]); // the matrix free product
+							sum[k] = sum[k] + (upf[k] - uf[k]);//- (uf[NVARS])*zarr[element*NVARS+k]; // the matrix free product
 							upf[k] = 0.; //Setting the upflux back to 0.
 							uf[k] = 0.; //Setting the uflux back to 0.
+							
 
 						}
 
 					}
 				}
+				
 				PetscInt rows [NVARS]; //To get Dinv for the corresponding element
-				const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
+				
 
 				Matrix<freal,nvars,1> zcopy,zelem; //This roundabout way of defining a vector somehow works. Using Eigen::Vector gives comple errors
 				for (int j = 0; j < NVARS; j++)
@@ -1890,17 +1906,22 @@ template<int nvars, typename scalar>
 					//Check for L elements
 					if (ridx[j] != -1)
 					{
-						ierr = shell->space->compute_residual_LU(shell->uvec,uflux,face[j]); 
-						ierr = shell->space->compute_residual_LU(u_pertZ,upflux,face[j]);
+
+						ierr = shell->space->compute_residual_LU(shell->uvec,uflux,face[j]);
+						ierr = VecAssemblyBegin(uflux);CHKERRQ(ierr);
+						ierr = VecAssemblyEnd(uflux);CHKERRQ(ierr); 
+						ierr = shell->space->compute_residual_LU(u_pertY,upflux,face[j]);
+						ierr = VecAssemblyBegin(upflux);CHKERRQ(ierr);
+						ierr = VecAssemblyEnd(upflux);CHKERRQ(ierr); 
 						for(int k = 0; k<NVARS; k++)
 						{
 							//sum[k] = sum[k] + (rUarr[ridx[j]*NVARS+k] - rarr[ridx[j]*NVARS+k])/pertmag; // the matrix free product
-							sum[k] = sum[k] + (upf[k] - uf[k]); // the matrix free product
+							sum[k] = sum[k] + (upf[k] - uf[k]);//-(uf[NVARS])*y1arr[element*NVARS+k]; // the matrix free product
 							ycopy[k] = sum[k]; //copying to multiply with Dinv
 						}
 					}
 				}
-				
+
 				yelem = Dinv*ycopy;// Storing in yelem
 
 
@@ -1921,14 +1942,16 @@ template<int nvars, typename scalar>
 			ierr = VecNorm(temp,NORM_2,&nrm);CHKERRQ(ierr); // nrm =  y1^{k+1} - y1^{k}
 			
 			std::cout<<nrm<<std::endl;
-			// if (it==2)
-			// {writePetscObj(y1,"y1new");
-			// return -1;	}	
+			if (it==1)
+			{writePetscObj(y1,"ymf");
+			return -1;}
+			
 		}
 		
+		
 		ierr = VecCopy(y1,y); CHKERRQ(ierr);
-		// writePetscObj(y1,"ymf");
-		// return -1;
+		
+		
 		return ierr;
 		
 	}
