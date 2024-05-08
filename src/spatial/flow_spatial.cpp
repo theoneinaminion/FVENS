@@ -894,6 +894,195 @@ void FlowFV<scalar,order2,constVisc>
 // For MF LU-SGS Preconditioner
 template<typename scalar, bool secondOrderRequested, bool constVisc>
 StatusCode
+FlowFV<scalar,secondOrderRequested,constVisc>::recalculate_uface(const Vec uvec) const
+{
+	//Used to recalculate uface for the MF LU-SGS preconditioner
+	StatusCode ierr = 0;
+	//const int mpirank = get_mpi_rank(PETSC_COMM_WORLD);
+	
+	PetscInt locnelem;
+	ierr = VecGetLocalSize(uvec, &locnelem); CHKERRQ(ierr);
+	assert(locnelem % NVARS == 0);
+	locnelem /= NVARS;
+	assert(locnelem == m->gnelem());
+
+	
+
+	const ConstGhostedVecHandler<scalar> uvh(uvec);
+	
+	const scalar *const uarr = uvh.getArray();
+	Eigen::Map<const MVector<scalar>> u(uarr, m->gnelem()+m->gnConnFace(), NVARS);
+
+	
+
+	{
+		amat::Array2dMutableView<scalar> uleft(uface.getLocalArrayLeft(), m->gnaface(),NVARS);
+		
+		// first, set cell-centered values of boundary cells as left-side values of boundary faces
+#pragma omp parallel for default(shared)
+		for(fint ied = m->gPhyBFaceStart(); ied < m->gPhyBFaceEnd(); ied++)
+		{
+			const fint ielem = m->gintfac(ied,0);
+			for(int ivar = 0; ivar < NVARS; ivar++)
+				uleft(ied,ivar) = u(ielem,ivar);
+		}
+	}
+
+	// cell-centred ghost cell values corresponding to physical boundaries
+	scalar *ubcell = nullptr;
+	if(m->gnbface() > 0)
+		ubcell = new scalar[m->gnbface()*NVARS];
+				
+	if(secondOrderRequested)
+	{
+		amat::Array2dMutableView<scalar> uleft(uface.getLocalArrayLeft(), m->gnaface(),NVARS);
+		amat::Array2dMutableView<scalar> uright(uface.getLocalArrayRight(), m->gnaface(),NVARS);
+
+		// get cell average values at ghost cells using BCs for reconstruction
+		compute_boundary_states(&uleft(m->gPhyBFaceStart(),0), &uright(m->gPhyBFaceStart(),0));
+
+		MVector<scalar> up(m->gnelem()+m->gnConnFace(), NVARS);
+
+		// convert cell-centered state vectors to primitive variables
+#pragma omp parallel default(shared)
+		{
+#pragma omp for
+			for(fint iface = m->gPhyBFaceStart(); iface < m->gPhyBFaceEnd(); iface++)
+			{
+				// Save ghost cell-centred physical boundary (conserved) values for later
+				for(int j = 0; j < NVARS; j++)
+					ubcell[(iface-m->gPhyBFaceStart())*NVARS+j] = uright(iface,j);
+
+				// convert boundary values to primitive
+				physics.getPrimitiveFromConserved(&uright(iface,0), &uright(iface,0));
+			}
+
+#pragma omp for
+			for(fint iel = 0; iel < m->gnelem()+m->gnConnFace(); iel++)
+				physics.getPrimitiveFromConserved(&uarr[iel*NVARS], &up(iel,0));
+		}
+
+		const amat::Array2dView<scalar> ug(&uright(m->gPhyBFaceStart(),0),m->gnbface(),NVARS);
+
+		{
+			amat::Array2dView<scalar> upa(&up(0,0), m->gnelem()+m->gnConnFace(),NVARS);
+			MutableGhostedVecHandler<scalar> gradh(gradvec);
+			gradcomp->compute_gradients(upa, ug, gradh.getArray());
+		}
+
+	
+		// In case of WENO reconstruction, we need gradients at conn ghost cells immediately
+		
+		if(nconfig.reconstruction == "WENO")
+		{
+			ierr = VecGhostUpdateBegin(gradvec, INSERT_VALUES, SCATTER_FORWARD);
+			CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(gradvec, INSERT_VALUES, SCATTER_FORWARD);
+			CHKERRQ(ierr);
+
+		}
+
+	
+
+		// reconstruct
+		{
+			const ConstGhostedVecHandler<scalar> gradh(gradvec);
+			lim->compute_face_values(up, ug, gradh.getArray(), uleft, uright);
+		}
+
+		
+	
+		if(nconfig.reconstruction != "WENO")
+		{
+			ierr = VecGhostUpdateBegin(gradvec, INSERT_VALUES, SCATTER_FORWARD);
+			CHKERRQ(ierr);
+						
+
+		}
+			
+
+		// Convert face values back to conserved variables - gradients stay primitive.
+#pragma omp parallel for default(shared)
+		for(fint iface = m->gConnBFaceStart(); iface < m->gConnBFaceEnd(); iface++)
+		{
+			physics.getConservedFromPrimitive(&uleft(iface,0), &uleft(iface,0));
+		}
+
+		uface.updateSharedFacesBegin();
+
+
+
+#pragma omp parallel default(shared)
+		{
+#pragma omp for
+			for(fint iface = m->gSubDomFaceStart(); iface < m->gSubDomFaceEnd(); iface++)
+			{
+				
+				physics.getConservedFromPrimitive(&uleft(iface,0), &uleft(iface,0));
+				physics.getConservedFromPrimitive(&uright(iface,0), &uright(iface,0));
+				
+			}
+	
+#pragma omp for
+			for(fint iface = m->gPhyBFaceStart(); iface < m->gPhyBFaceEnd(); iface++)
+			{
+				physics.getConservedFromPrimitive(uface.getLocalArrayLeft()+iface*NVARS,
+				                                  uface.getLocalArrayLeft()+iface*NVARS);
+			}
+		}
+	}
+	
+	else
+	{
+		// if order is 1, set the face data same as cell-centred data for all faces
+
+		// set both left and right states for all interior and connectivity faces
+		amat::Array2dMutableView<scalar> uleft(uface.getLocalArrayLeft(), m->gnaface(),NVARS);
+		amat::Array2dMutableView<scalar> uright(uface.getLocalArrayRight(), m->gnaface(),NVARS);
+#pragma omp parallel for default(shared)
+		for(fint ied = m->gDomFaceStart(); ied < m->gDomFaceEnd(); ied++)
+		{
+			const fint ielem = m->gintfac(ied,0);
+			const fint jelem = m->gintfac(ied,1);
+			for(int ivar = 0; ivar < NVARS; ivar++)
+			{
+				uleft(ied,ivar) = u(ielem,ivar);
+				uright(ied,ivar) = u(jelem,ivar);
+			}
+		}
+	}
+
+	// get right (ghost) state at boundary faces for computing fluxes
+	compute_boundary_states(uface.getLocalArrayLeft()+m->gPhyBFaceStart()*NVARS,
+	                        uface.getLocalArrayRight()+m->gPhyBFaceStart()*NVARS);
+
+	
+	if(secondOrderRequested)
+	{
+		uface.updateSharedFacesEnd();
+
+		if(nconfig.reconstruction != "WENO")
+		{
+			ierr = VecGhostUpdateEnd(gradvec, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+		}
+	}
+
+	ConstGhostedVecHandler<scalar> gradh;
+	if(secondOrderRequested)
+		gradh.setVec(gradvec);
+	const scalar *const gradarray = secondOrderRequested ? gradh.getArray() : nullptr;
+
+	
+	// Depending on whether we want a 2nd order solution, we use the correct array for phy. boun.
+	//  ghost cells
+
+
+	delete [] ubcell;
+	return ierr;
+}
+
+template<typename scalar, bool secondOrderRequested, bool constVisc>
+StatusCode
 FlowFV<scalar,secondOrderRequested,constVisc>::compute_residual_LU(const Vec uvec, Vec rvec,
 	                            const int flag) const
 {

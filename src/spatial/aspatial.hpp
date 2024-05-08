@@ -68,7 +68,9 @@ public:
 
 	//For the use of LU-SGS mf preconditioner
 	virtual StatusCode compute_residual_LU(const Vec u, Vec residual,
-	                            const int flag) const = 0;										
+	                            const int flag) const = 0;	
+
+	virtual StatusCode recalculate_uface(const Vec u) const = 0;									
 
 	/// Computes and assembles the residual Jacobian
 	StatusCode assemble_jacobian(const Vec uvec, Mat A) const;

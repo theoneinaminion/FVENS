@@ -186,6 +186,8 @@ public:
 	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_apply5(PC pc, Vec x, Vec y);
 	template<int nvars, typename scalar>
+	PetscErrorCode mf_pc_apply6(PC pc, Vec x, Vec y);
+	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_destroy(PC pc);
 
 	PetscErrorCode mf_lusgs(Vec x, Vec y);

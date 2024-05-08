@@ -87,6 +87,10 @@ public:
 	StatusCode compute_residual_LU(const Vec u, Vec residual,
 	                            const int flag) const {
 									return 1;
+								} ;	
+
+	StatusCode recalculate_uface(const Vec u) const {
+									return 1;
 								} ;				  
 
 	~DiffusionMA();

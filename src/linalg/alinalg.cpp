@@ -1963,7 +1963,63 @@ template<int nvars, typename scalar>
 
 
 
+template<int nvars, typename scalar>
+	PetscErrorCode mf_pc_apply6(PC pc, Vec x, Vec y)
+	{
 
+		//Checking whether M*randomvec is the same when applied using matrices and matrix free. 
+		//std::cout<<"mfpcapply3"<<std::endl;
+		int ierr = 0;
+		MatrixFreePreconditioner<nvars> *shell;
+		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
+
+		const UMesh<freal,NDIM> *const m = shell->space->mesh();
+			
+		// MPI_Comm mycomm;
+		// ierr = PetscObjectGetComm((PetscObject)shell->Dinv, &mycomm); CHKERRQ(ierr);
+		// const int mpisize = get_mpi_size(mycomm);
+		// const bool isdistributed = (mpisize > 1);
+
+		using Eigen::Matrix; using Eigen::RowMajor;
+		Matrix<freal,nvars,nvars,RowMajor> Dinv; //inverse of the diagonal matrix per element. Data taken from shell->Dinv
+
+		Vec z, y1, temp;
+
+		ierr = VecDuplicate(shell->uvec,&z);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&y1);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&temp);CHKERRQ(ierr);
+
+		ierr = VecSet(y1,0);CHKERRQ(ierr);
+		ierr = VecSet(z,0);CHKERRQ(ierr);
+
+		shell->space->reconstruct_uface(shell->uvec);
+		L2TraceVector<scalar,NVARS>* uface = &(shell->space->uface);
+
+		//FORWARD SWEEP
+		for(int i=0; i < m->gnelem(); i++)
+		{
+			
+			int nface = m->gnfael(i); //Number of faces of the element
+			PetscInt elidx[nface];//Element adjacent to the given element
+
+			for(int jface=0; jface<nface; jface++)
+			{	
+				elidx[jface] = m->gesuel(i,jface);
+				
+			}
+		
+		}
+	
+		
+		
+		return ierr;
+		
+	}
+
+	template
+	PetscErrorCode mf_pc_apply6<NVARS, freal>(PC pc, const Vec x, Vec y);
+	template
+	PetscErrorCode mf_pc_apply6<1, freal>(PC pc, const Vec x, Vec y);
 
 
 
