@@ -1974,6 +1974,17 @@ template<int nvars, typename scalar>
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 
 		const UMesh<freal,NDIM> *const m = shell->space->mesh();
+		const std::vector<fint> globindices = m->getConnectivityGlobalIndices();
+		
+		Vec flux, pertflux; //Flux and the perturbated flux vectors
+		ierr = VecCreateGhostBlock(PETSC_COMM_WORLD, nvars, m->gSubDomFaceEnd()*nvars,
+	                           m->gFaceEnd()*nvars, m->gnConnFace(),
+	                           globindices.data(), &flux); CHKERRQ(ierr);
+		ierr = VecSetFromOptions(flux); CHKERRQ(ierr);
+
+		ierr = VecDuplicate(flux,&pertflux);CHKERRQ(ierr);
+
+		
 			
 		// MPI_Comm mycomm;
 		// ierr = PetscObjectGetComm((PetscObject)shell->Dinv, &mycomm); CHKERRQ(ierr);
@@ -1992,23 +2003,23 @@ template<int nvars, typename scalar>
 		ierr = VecSet(y1,0);CHKERRQ(ierr);
 		ierr = VecSet(z,0);CHKERRQ(ierr);
 
-		shell->space->reconstruct_uface(shell->uvec);
-		L2TraceVector<scalar,NVARS>* uface = &(shell->space->uface);
 
-		//FORWARD SWEEP
-		for(int i=0; i < m->gnelem(); i++)
-		{
+		//shell->space->reconstruct_uface(shell->uvec);
+
+		// //FORWARD SWEEP
+		// for(int i=0; i < m->gnelem(); i++)
+		// {
 			
-			int nface = m->gnfael(i); //Number of faces of the element
-			PetscInt elidx[nface];//Element adjacent to the given element
+		// 	int nface = m->gnfael(i); //Number of faces of the element
+		// 	PetscInt elidx[nface];//Element adjacent to the given element
 
-			for(int jface=0; jface<nface; jface++)
-			{	
-				elidx[jface] = m->gesuel(i,jface);
+		// 	for(int jface=0; jface<nface; jface++)
+		// 	{	
+		// 		elidx[jface] = m->gesuel(i,jface);
 				
-			}
+		// 	}
 		
-		}
+		// }
 	
 		
 		

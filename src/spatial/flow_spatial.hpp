@@ -89,7 +89,7 @@ public:
 	//For the use of LU-SGS mf preconditioner
 	virtual StatusCode compute_residual_LU(const Vec u, Vec residual,
 	                            const int flag) const = 0;	
-	virtual StatusCode recalculate_uface(const Vec u) const = 0;																
+	virtual StatusCode compute_fluxvec(const Vec u, Vec fluxvec) const = 0;							
 
 	/// Computes Cp, Csf, Cl, Cd_p and Cd_sf on one surface
 	/** \param[in] u The multi-vector containing conserved variables
@@ -208,15 +208,19 @@ public:
 	StatusCode compute_residual_LU(const Vec u, Vec residual,
 	                            const int flag) const;	
 
-	//Reconstruct uface for diff state vectors used in mat-free LU-SGS
-	StatusCode recalculate_uface(const Vec u) const;								
-
+				
+	StatusCode compute_fluxvec(const Vec u, Vec fluxvec) const;
 
 	/// Computes fluxes into the residual vector
 	void compute_fluxes(const scalar *const u, const scalar *const gradients,
 	                    const scalar *const uleft, const scalar *const uright,
 	                    const scalar *const ug,
 	                    scalar *const res) const;
+	/// Computes fluxes vector at all faces
+	void compute_fluxes_vec(const scalar *const u, const scalar *const gradients,
+	                    const scalar *const uleft, const scalar *const uright,
+	                    const scalar *const ug,
+	                    scalar *const res) const;					
 
 	//For the use of LU-SGS mf preconditioner
 	void compute_fluxes_LU(const scalar *const u, const scalar *const gradients,

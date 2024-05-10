@@ -88,10 +88,10 @@ public:
 	                            const int flag) const {
 									return 1;
 								} ;	
-
-	StatusCode recalculate_uface(const Vec u) const {
+	StatusCode compute_fluxvec(const Vec u, Vec fluxvec) const{
 									return 1;
-								} ;				  
+								} ;							
+			  
 
 	~DiffusionMA();
 

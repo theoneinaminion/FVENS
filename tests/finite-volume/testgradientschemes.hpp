@@ -31,6 +31,9 @@ public:
 	                            const int flag) const {
 									return 1;
 								} ;	
+	fvens::StatusCode compute_fluxvec(const Vec u, Vec fluxvec) const{
+									return 1;
+								} ;								
 
 	void compute_local_jacobian_interior(const fint iface,
 	                                     const freal *const ul, const freal *const ur,

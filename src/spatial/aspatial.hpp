@@ -70,8 +70,8 @@ public:
 	virtual StatusCode compute_residual_LU(const Vec u, Vec residual,
 	                            const int flag) const = 0;	
 
-	virtual StatusCode recalculate_uface(const Vec u) const = 0;									
-
+	virtual StatusCode compute_fluxvec(const Vec u, Vec fluxvec) const = 0;
+	
 	/// Computes and assembles the residual Jacobian
 	StatusCode assemble_jacobian(const Vec uvec, Mat A) const;
 	//StatusCode getLU(const Vec uvec, Mat Lmat, Mat Umat)
