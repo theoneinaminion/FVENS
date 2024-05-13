@@ -659,7 +659,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 	
-	shell->getLU(A);
+	//shell->getLU(A);
 	/*PetscInt m;
 	PetscInt n;
 	MatGetSize(A, &m, &n);
@@ -1037,14 +1037,14 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			ierr = VecCopy(temp2,y1); //y^{k+1} = y^{k+1}-y^{k}
 
 			//std::cout<<nrm<<std::endl;
-			 if (it==1)
-			{	writePetscObj(y1,"y1mat");
-				return -1;
-			}
+			//  if (it==1)
+			// {	writePetscObj(y1,"y1mat");
+			// 	return -1;
+			// }
 		
 		}
 		//std::cout<<nrm<<std::endl;
-		//std::cout<<nrm<<std::endl;
+		std::cout<<nrm<<std::endl;
 		ierr = VecCopy(y1,y);CHKERRQ(ierr);
 		
 		return ierr;
@@ -1963,15 +1963,23 @@ template<int nvars, typename scalar>
 
 
 
-template<int nvars, typename scalar>
+	template<int nvars, typename scalar>
 	PetscErrorCode mf_pc_apply6(PC pc, Vec x, Vec y)
 	{
 
 		//Checking whether M*randomvec is the same when applied using matrices and matrix free. 
 		//std::cout<<"mfpcapply3"<<std::endl;
+		using Eigen::Matrix; using Eigen::RowMajor;
+		Matrix<freal,nvars,nvars,RowMajor> Dinv; //inverse of the diagonal matrix per element. Data taken from shell->Dinv
+
 		int ierr = 0;
 		MatrixFreePreconditioner<nvars> *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
+
+		MPI_Comm mycomm;
+		ierr = PetscObjectGetComm((PetscObject)shell->Dinv, &mycomm); CHKERRQ(ierr);
+		const int mpisize = get_mpi_size(mycomm);
+		const bool isdistributed = (mpisize > 1);
 
 		const UMesh<freal,NDIM> *const m = shell->space->mesh();
 		const std::vector<fint> globindices = m->getConnectivityGlobalIndices();
@@ -1984,45 +1992,165 @@ template<int nvars, typename scalar>
 
 		ierr = VecDuplicate(flux,&pertflux);CHKERRQ(ierr);
 
-		
-			
-		// MPI_Comm mycomm;
-		// ierr = PetscObjectGetComm((PetscObject)shell->Dinv, &mycomm); CHKERRQ(ierr);
-		// const int mpisize = get_mpi_size(mycomm);
-		// const bool isdistributed = (mpisize > 1);
-
-		using Eigen::Matrix; using Eigen::RowMajor;
-		Matrix<freal,nvars,nvars,RowMajor> Dinv; //inverse of the diagonal matrix per element. Data taken from shell->Dinv
-
-		Vec z, y1, temp;
+		Vec z, y1, upert;
 
 		ierr = VecDuplicate(shell->uvec,&z);CHKERRQ(ierr);
 		ierr = VecDuplicate(shell->uvec,&y1);CHKERRQ(ierr);
-		ierr = VecDuplicate(shell->uvec,&temp);CHKERRQ(ierr);
+		ierr = VecDuplicate(shell->uvec,&upert);CHKERRQ(ierr);
 
-		ierr = VecSet(y1,0);CHKERRQ(ierr);
-		ierr = VecSet(z,0);CHKERRQ(ierr);
+		ierr = VecSet(y1,0.);CHKERRQ(ierr);
+		ierr = VecSet(z,0.);CHKERRQ(ierr);
+		ierr = VecSet(flux,0.);CHKERRQ(ierr);
+		ierr = VecSet(pertflux,0.);CHKERRQ(ierr);
 
+		shell->space->compute_fluxvec(shell->uvec,flux); //Flux vector of unperturbed state
+		ierr = VecGhostUpdateBegin(flux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(flux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
 
-		//shell->space->reconstruct_uface(shell->uvec);
+		ierr = VecWAXPY(upert,1.0,shell->uvec,z);CHKERRQ(ierr); //Perturbed state
+		shell->space->compute_fluxvec(upert,pertflux); //Flux vector of perturbed state
+		ierr = VecGhostUpdateBegin(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
 
-		// //FORWARD SWEEP
-		// for(int i=0; i < m->gnelem(); i++)
-		// {
-			
-		// 	int nface = m->gnfael(i); //Number of faces of the element
-		// 	PetscInt elidx[nface];//Element adjacent to the given element
+		ConstVecHandler<scalar> xvh(x);
+		const scalar *const xarr = xvh.getArray();
+		
+		ConstVecHandler<scalar> fluxvh(flux);
+		const scalar *const fluxarr = fluxvh.getArray();
 
-		// 	for(int jface=0; jface<nface; jface++)
-		// 	{	
-		// 		elidx[jface] = m->gesuel(i,jface);
+		ConstVecHandler<scalar> pertfluxvh(pertflux);
+		const scalar *const pertfluxarr = pertfluxvh.getArray();
+
+		
+
+		//FORWARD SWEEP
+		for(int i=0; i < m->gnelem(); i++)
+		{
+			const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
+			int nface = m->gnfael(i); //Number of faces of the element
+			PetscInt elidx[nface],fidx[nface];//Element adjacent to the given element anf face index
+
+			for(int jface=0; jface<nface; jface++)
+			{	
+				elidx[jface] = m->gesuel(i,jface); //elements surrounding faces.
+				fidx[jface]	 = m->gelemface(i,jface);
+			}
+
+			ierr = VecWAXPY(upert,1.0,shell->uvec,z);CHKERRQ(ierr); //Perturbed state
+			shell->space->compute_fluxvec(upert,pertflux); //Flux vector of perturbed state
+			ierr = VecGhostUpdateBegin(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
+
+			//Sum of flux differences only from lower triangular elements
+			PetscScalar sum[NVARS]; //To store sum of differences in fluxes 
+			PetscInt rows[NVARS]; //Row indices 
+			for (int k = 0; k < NVARS; k++)
+			{
+				sum[k] = 0;
+				rows[k] = element*NVARS+k;
+			}
+			for (int j = 0; j < nface; j++)
+			{
 				
-		// 	}
+				if(elidx[j]<i) // L elements only
+				{	
+					for (int k = 0; k < NVARS; k++)
+					{
+						sum[k] = sum[k] + (fluxarr[fidx[j]*NVARS+k] - pertfluxarr[fidx[j]*NVARS+k]);
+					}
+
+				}
+			}
+
+			ierr = MatGetValues(shell->Dinv, NVARS, rows, NVARS, rows, Dinv.data());CHKERRQ(ierr);
+			Matrix<freal,nvars,1> zcopy,zelem;
+
+			for (int k = 0; k < NVARS; k++)
+			{
+				zcopy[k] = xarr[rows[k]] - sum[k];
+			}
+
+			zelem = Dinv*zcopy; //z^{k+1} = Dinv*(x - sum) = Dinv*(x - Lz)
+			
+			MutableVecHandler<scalar> zvh(z);
+			scalar *const zarr = zvh.getArray();
+
+			for (int k = 0; k < NVARS; k++)
+			{
+				zarr[rows[k]] = zelem[k];
+			}
+			ierr = VecGhostUpdateBegin(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
 		
-		// }
-	
-		
-		
+		}
+
+
+		//BACKWARD SWEEP
+		ConstVecHandler<scalar> zvh(z);	
+		const scalar *const zarr = zvh.getArray();
+
+		MutableVecHandler<scalar> yvh(y1);
+		scalar *const y1arr = yvh.getArray();
+
+		for (int i = 0; i< m->gnelem(); i++)
+		{
+			const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
+			int nface = m->gnfael(i); //Number of faces of the element
+			PetscInt elidx[nface],fidx[nface];//Element adjacent to the given element anf face index
+
+			for(int jface=0; jface<nface; jface++)
+			{	
+				elidx[jface] = m->gesuel(i,jface); //elements surrounding faces.
+				fidx[jface]	 = m->gelemface(i,jface);
+			}
+
+			ierr = VecWAXPY(upert,1.0,shell->uvec,y1);CHKERRQ(ierr); //Perturbed state
+			shell->space->compute_fluxvec(upert,pertflux); //Flux vector of perturbed state
+			ierr = VecGhostUpdateBegin(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
+			
+			//Sum of flux differences only from lower triangular elements
+			PetscScalar sum[NVARS]; //To store sum of differences in fluxes 
+			PetscInt rows[NVARS]; //Row indices
+			Matrix<freal,nvars,1> yelem, ycopy; 
+			for (int k = 0; k < NVARS; k++)
+			{
+				sum[k] = 0;
+				rows[k] = element*NVARS+k;
+			}
+			for (int j = 0; j < nface; j++)
+			{
+				
+				if(elidx[j]>i) // U elements only
+				{	
+					for (int k = 0; k < NVARS; k++)
+					{
+						sum[k] = sum[k] + (fluxarr[fidx[j]*NVARS+k] - pertfluxarr[fidx[j]*NVARS+k]);
+					}
+
+				}
+			}
+
+			ierr = MatGetValues(shell->Dinv, NVARS, rows, NVARS, rows, Dinv.data());CHKERRQ(ierr);
+			
+			for (int k = 0; k < NVARS; k++)
+			{
+				ycopy[k] = sum[k];
+			}
+			yelem = Dinv*ycopy; //y^{k+1} = Dinv*(sum) = Dinv*(Uz)
+
+			for (int k = 0; k < NVARS; k++)
+			{
+				y1arr[rows[k]] = zarr[rows[k]] - yelem[k];
+			}
+			ierr = VecGhostUpdateBegin(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
+
+		}
+		ierr = VecCopy(y1,y); CHKERRQ(ierr);
+		writePetscObj(y1,"ymf");
+		writePetscObj(z,"z");
+		return -1;
 		return ierr;
 		
 	}
