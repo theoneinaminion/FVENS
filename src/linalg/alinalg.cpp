@@ -2021,7 +2021,11 @@ template<int nvars, typename scalar>
 		ConstVecHandler<scalar> pertfluxvh(pertflux);
 		const scalar *const pertfluxarr = pertfluxvh.getArray();
 
-		
+		ConstVecHandler<scalar> uperth(upert);
+		const scalar *const upertarr = uperth.getArray();
+
+		MutableVecHandler<scalar> zvh(z);
+		scalar *const zarr = zvh.getArray();
 
 		//FORWARD SWEEP
 		for(int i=0; i < m->gnelem(); i++)
@@ -2032,8 +2036,8 @@ template<int nvars, typename scalar>
 
 			for(int jface=0; jface<nface; jface++)
 			{	
-				elidx[jface] = m->gesuel(i,jface); //elements surrounding faces.
-				fidx[jface]	 = m->gelemface(i,jface);
+				elidx[jface] = m->gesuel(element,jface); //elements surrounding faces.
+				fidx[jface]	 = m->gelemface(element,jface);
 			}
 
 			ierr = VecWAXPY(upert,1.0,shell->uvec,z);CHKERRQ(ierr); //Perturbed state
@@ -2049,6 +2053,14 @@ template<int nvars, typename scalar>
 				sum[k] = 0;
 				rows[k] = element*NVARS+k;
 			}
+			int bl = 0;
+			
+			if (i==bl)
+			{
+				writePetscObj(shell->uvec,"u");
+				return -1;
+			}
+		
 			for (int j = 0; j < nface; j++)
 			{
 				
@@ -2057,10 +2069,25 @@ template<int nvars, typename scalar>
 					for (int k = 0; k < NVARS; k++)
 					{
 						sum[k] = sum[k] + (fluxarr[fidx[j]*NVARS+k] - pertfluxarr[fidx[j]*NVARS+k]);
+						if(i==bl)
+						{
+							std::cout<<fidx[j]<<" "<<element*NVARS+k<<" "<<upertarr[element*NVARS+k]<<" 			"<<pertfluxarr[fidx[j]*NVARS+k]<<std::endl;
+						}
 					}
-
 				}
 			}
+		
+			if (i==bl)
+			{
+				std::cout<<"sum"<<std::endl;
+				for (int k = 0; k < NVARS; k++)
+				{
+					std::cout<<sum[k]<<std::endl;
+				}
+			}
+		
+		
+
 
 			ierr = MatGetValues(shell->Dinv, NVARS, rows, NVARS, rows, Dinv.data());CHKERRQ(ierr);
 			Matrix<freal,nvars,1> zcopy,zelem;
@@ -2071,23 +2098,28 @@ template<int nvars, typename scalar>
 			}
 
 			zelem = Dinv*zcopy; //z^{k+1} = Dinv*(x - sum) = Dinv*(x - Lz)
+
+			if (i==bl)
+			{
+				std::cout<<"zelem"<<std::endl;
+				std::cout<<zelem<<std::endl;
+			}
+		
 			
-			MutableVecHandler<scalar> zvh(z);
-			scalar *const zarr = zvh.getArray();
+
 
 			for (int k = 0; k < NVARS; k++)
 			{
 				zarr[rows[k]] = zelem[k];
 			}
 			ierr = VecGhostUpdateBegin(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-			ierr = VecGhostUpdateEnd(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
-		
+			ierr = VecGhostUpdateEnd(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+
 		}
-
-
+		
 		//BACKWARD SWEEP
-		ConstVecHandler<scalar> zvh(z);	
-		const scalar *const zarr = zvh.getArray();
+		ConstVecHandler<scalar> zvhc(z);	
+		const scalar *const zarrc = zvhc.getArray();
 
 		MutableVecHandler<scalar> yvh(y1);
 		scalar *const y1arr = yvh.getArray();
@@ -2141,7 +2173,7 @@ template<int nvars, typename scalar>
 
 			for (int k = 0; k < NVARS; k++)
 			{
-				y1arr[rows[k]] = zarr[rows[k]] - yelem[k];
+				y1arr[rows[k]] = zarrc[rows[k]] - yelem[k];
 			}
 			ierr = VecGhostUpdateBegin(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
