@@ -659,7 +659,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 	
-	//shell->getLU(A);
+	shell->getLU(A);
 	/*PetscInt m;
 	PetscInt n;
 	MatGetSize(A, &m, &n);
@@ -1043,6 +1043,9 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 			// }
 		
 		}
+		writePetscObj(y1,"y1mat");
+		writePetscObj(z,"zm");
+		return -1;
 		//std::cout<<nrm<<std::endl;
 		std::cout<<nrm<<std::endl;
 		ierr = VecCopy(y1,y);CHKERRQ(ierr);
@@ -1976,6 +1979,7 @@ template<int nvars, typename scalar>
 		MatrixFreePreconditioner<nvars> *shell;
 		ierr = PCShellGetContext(pc,&shell);CHKERRQ(ierr);
 
+
 		MPI_Comm mycomm;
 		ierr = PetscObjectGetComm((PetscObject)shell->Dinv, &mycomm); CHKERRQ(ierr);
 		const int mpisize = get_mpi_size(mycomm);
@@ -2021,11 +2025,12 @@ template<int nvars, typename scalar>
 		ConstVecHandler<scalar> pertfluxvh(pertflux);
 		const scalar *const pertfluxarr = pertfluxvh.getArray();
 
-		ConstVecHandler<scalar> uperth(upert);
-		const scalar *const upertarr = uperth.getArray();
+		// ConstVecHandler<scalar> uperth(upert);
+		// const scalar *const upertarr = uperth.getArray();
 
 		MutableVecHandler<scalar> zvh(z);
 		scalar *const zarr = zvh.getArray();
+		PetscScalar eps = 1e-6;
 
 		//FORWARD SWEEP
 		for(int i=0; i < m->gnelem(); i++)
@@ -2038,13 +2043,15 @@ template<int nvars, typename scalar>
 			{	
 				elidx[jface] = m->gesuel(element,jface); //elements surrounding faces.
 				fidx[jface]	 = m->gelemface(element,jface);
+				//std::cout<<elidx[jface]<<" "<<fidx[jface]<<std::endl;
 			}
-
-			ierr = VecWAXPY(upert,1.0,shell->uvec,z);CHKERRQ(ierr); //Perturbed state
+			//std::cout<<"---------------------"<<std::endl;
+			ierr = VecWAXPY(upert,eps,z,shell->uvec);CHKERRQ(ierr); //Perturbed state
 			shell->space->compute_fluxvec(upert,pertflux); //Flux vector of perturbed state
 			ierr = VecGhostUpdateBegin(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
 
+			
 			//Sum of flux differences only from lower triangular elements
 			PetscScalar sum[NVARS]; //To store sum of differences in fluxes 
 			PetscInt rows[NVARS]; //Row indices 
@@ -2053,40 +2060,23 @@ template<int nvars, typename scalar>
 				sum[k] = 0;
 				rows[k] = element*NVARS+k;
 			}
-			int bl = 0;
-			
-			if (i==bl)
-			{
-				writePetscObj(shell->uvec,"u");
-				return -1;
-			}
-		
+			//int bl = 4;
+
 			for (int j = 0; j < nface; j++)
 			{
 				
 				if(elidx[j]<i) // L elements only
 				{	
+					//std::cout<<element<<" "<< elidx[j]<< " "<<fidx[j]<<std::endl;
 					for (int k = 0; k < NVARS; k++)
 					{
-						sum[k] = sum[k] + (fluxarr[fidx[j]*NVARS+k] - pertfluxarr[fidx[j]*NVARS+k]);
-						if(i==bl)
-						{
-							std::cout<<fidx[j]<<" "<<element*NVARS+k<<" "<<upertarr[element*NVARS+k]<<" 			"<<pertfluxarr[fidx[j]*NVARS+k]<<std::endl;
-						}
+						sum[k] = sum[k] + (pertfluxarr[fidx[j]*NVARS+k]-fluxarr[fidx[j]*NVARS+k])/eps;
+						//std::cout<<element<<" "<< elidx[j]<< " "<<upertarr[elidx[j]*NVARS+k]<<" "<<pertfluxarr[fidx[j]*NVARS+k]<<" "<<sum[k]<<std::endl;
 					}
 				}
 			}
-		
-			if (i==bl)
-			{
-				std::cout<<"sum"<<std::endl;
-				for (int k = 0; k < NVARS; k++)
-				{
-					std::cout<<sum[k]<<std::endl;
-				}
-			}
-		
-		
+			//std::cout<<i<<std::endl;
+			//std::cout<<"---------------------"<<std::endl;
 
 
 			ierr = MatGetValues(shell->Dinv, NVARS, rows, NVARS, rows, Dinv.data());CHKERRQ(ierr);
@@ -2099,19 +2089,25 @@ template<int nvars, typename scalar>
 
 			zelem = Dinv*zcopy; //z^{k+1} = Dinv*(x - sum) = Dinv*(x - Lz)
 
-			if (i==bl)
-			{
-				std::cout<<"zelem"<<std::endl;
-				std::cout<<zelem<<std::endl;
-			}
+			// if (i==bl)
+			// {
+			// 	std::cout<<"zelem"<<std::endl;
+			// 	std::cout<<zelem<<std::endl;
+			// }
 		
-			
+			//std::cout<<zelem<<std::endl;
 
 
 			for (int k = 0; k < NVARS; k++)
 			{
 				zarr[rows[k]] = zelem[k];
 			}
+			
+			// if (i==bl)
+			// {
+				
+			// 	return -1;
+			// }
 			ierr = VecGhostUpdateBegin(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 
@@ -2124,7 +2120,7 @@ template<int nvars, typename scalar>
 		MutableVecHandler<scalar> yvh(y1);
 		scalar *const y1arr = yvh.getArray();
 
-		for (int i = 0; i< m->gnelem(); i++)
+		for (int i = m->gnelem() - 1; i>=0 ; i--)
 		{
 			const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
 			int nface = m->gnfael(i); //Number of faces of the element
@@ -2134,9 +2130,10 @@ template<int nvars, typename scalar>
 			{	
 				elidx[jface] = m->gesuel(i,jface); //elements surrounding faces.
 				fidx[jface]	 = m->gelemface(i,jface);
+				//std::cout<<elidx[jface]<<" "<<fidx[jface]<<std::endl;
 			}
-
-			ierr = VecWAXPY(upert,1.0,shell->uvec,y1);CHKERRQ(ierr); //Perturbed state
+			//std::cout<<"------el face aobve; rest below------------"<<std::endl;
+			ierr = VecWAXPY(upert,eps,y1,shell->uvec);CHKERRQ(ierr); //Perturbed state
 			shell->space->compute_fluxvec(upert,pertflux); //Flux vector of perturbed state
 			ierr = VecGhostUpdateBegin(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
@@ -2145,19 +2142,24 @@ template<int nvars, typename scalar>
 			PetscScalar sum[NVARS]; //To store sum of differences in fluxes 
 			PetscInt rows[NVARS]; //Row indices
 			Matrix<freal,nvars,1> yelem, ycopy; 
+			//int bl=m->gnelem() - 5;
 			for (int k = 0; k < NVARS; k++)
 			{
 				sum[k] = 0;
 				rows[k] = element*NVARS+k;
 			}
+			//std::cout<<"---------------------"<<std::endl;
 			for (int j = 0; j < nface; j++)
 			{
 				
-				if(elidx[j]>i) // U elements only
+				if((elidx[j]>i)&&(elidx[j]<m->gnelem())) // U elements only
 				{	
 					for (int k = 0; k < NVARS; k++)
 					{
-						sum[k] = sum[k] + (fluxarr[fidx[j]*NVARS+k] - pertfluxarr[fidx[j]*NVARS+k]);
+						sum[k] = sum[k] + (pertfluxarr[fidx[j]*NVARS+k]-fluxarr[fidx[j]*NVARS+k])/eps;
+
+						//std::cout<<" "<< elidx[j]<< " "<<upertarr[elidx[j]*NVARS+k]<<" "<<pertfluxarr[fidx[j]*NVARS+k]<<" "<<sum[k]<<std::endl;
+
 					}
 
 				}
@@ -2170,19 +2172,26 @@ template<int nvars, typename scalar>
 				ycopy[k] = sum[k];
 			}
 			yelem = Dinv*ycopy; //y^{k+1} = Dinv*(sum) = Dinv*(Uz)
-
+			//std::cout<<yelem<<std::endl;
+			// if (i==bl)
+			// 	return -1;
 			for (int k = 0; k < NVARS; k++)
 			{
 				y1arr[rows[k]] = zarrc[rows[k]] - yelem[k];
 			}
-			ierr = VecGhostUpdateBegin(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
-			ierr = VecGhostUpdateEnd(z, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
+			ierr = VecGhostUpdateBegin(y1, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
+			ierr = VecGhostUpdateEnd(y1, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
 
 		}
 		ierr = VecCopy(y1,y); CHKERRQ(ierr);
-		writePetscObj(y1,"ymf");
-		writePetscObj(z,"z");
-		return -1;
+		// PetscScalar nrm1, nrm2, nrm3;
+		// ierr = VecNorm(y,NORM_2,&nrm1);CHKERRQ(ierr);
+		// ierr = VecNorm(z,NORM_2,&nrm2);CHKERRQ(ierr);
+		// ierr = VecNorm(shell->uvec,NORM_2,&nrm3);CHKERRQ(ierr);
+		// std::cout<<nrm1<<" "<<nrm2<<" "<<nrm3<<std::endl;
+		// writePetscObj(y1,"ymf");
+		// writePetscObj(z,"z");
+		// return -1;
 		return ierr;
 		
 	}
