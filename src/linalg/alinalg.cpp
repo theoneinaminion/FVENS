@@ -659,7 +659,7 @@ double MatrixFreePreconditioner<nvars>:: epsilon_calc(Vec x, Vec y) {
 	ierr = MatScale(shell->Dinv,0); CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,shell->Dinv); CHKERRQ(ierr);
 	
-	shell->getLU(A);
+	//shell->getLU(A);
 	/*PetscInt m;
 	PetscInt n;
 	MatGetSize(A, &m, &n);
@@ -2030,7 +2030,7 @@ template<int nvars, typename scalar>
 
 		MutableVecHandler<scalar> zvh(z);
 		scalar *const zarr = zvh.getArray();
-		PetscScalar eps = 1e-6;
+		PetscScalar eps = 1;
 
 		//FORWARD SWEEP
 		for(int i=0; i < m->gnelem(); i++)
@@ -2051,7 +2051,8 @@ template<int nvars, typename scalar>
 			ierr = VecGhostUpdateBegin(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr);
 			ierr = VecGhostUpdateEnd(pertflux, ADD_VALUES, SCATTER_REVERSE); CHKERRQ(ierr); 
 
-			
+			//compute fluxes for one elem here
+					
 			//Sum of flux differences only from lower triangular elements
 			PetscScalar sum[NVARS]; //To store sum of differences in fluxes 
 			PetscInt rows[NVARS]; //Row indices 

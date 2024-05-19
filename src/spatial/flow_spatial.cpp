@@ -1399,7 +1399,7 @@ FlowFV<scalar,secondOrderRequested,constVisc>::compute_fluxvec(const Vec uvec, V
 	if(m->gnbface() > 0)
 		ubcell = new scalar[m->gnbface()*NVARS];
 				
-	if(secondOrderRequested)
+	if(secondOrderRequested) //Always set to false
 	{
 		amat::Array2dMutableView<scalar> uleft(uface.getLocalArrayLeft(), m->gnaface(),NVARS);
 		amat::Array2dMutableView<scalar> uright(uface.getLocalArrayRight(), m->gnaface(),NVARS);
