@@ -29,11 +29,14 @@ public:
 	//This is just to ensure no compiler warnings when using LU-SGS preconditioner
 	fvens::StatusCode compute_residual_LU(const Vec u, Vec residual,
 	                            const int flag) const {
-									return 1;
+									return 0;
 								} ;	
 	fvens::StatusCode compute_fluxvec(const Vec u, Vec fluxvec) const{
-									return 1;
-								} ;								
+									return 0;
+								} ;	
+	fvens::StatusCode update_fluxes(const Vec u, Vec fluxvec, const int faceID) const{
+									return 0;
+								} ;															
 
 	void compute_local_jacobian_interior(const fint iface,
 	                                     const freal *const ul, const freal *const ur,

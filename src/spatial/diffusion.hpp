@@ -90,8 +90,11 @@ public:
 								} ;	
 	StatusCode compute_fluxvec(const Vec u, Vec fluxvec) const{
 									return 1;
-								} ;							
-			  
+								} ;	
+
+	StatusCode update_fluxes(const Vec u, Vec fluxvec, const int faceID) const{
+									return 1;
+								} ;			  
 
 	~DiffusionMA();
 

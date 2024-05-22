@@ -90,6 +90,7 @@ public:
 	virtual StatusCode compute_residual_LU(const Vec u, Vec residual,
 	                            const int flag) const = 0;	
 	virtual StatusCode compute_fluxvec(const Vec u, Vec fluxvec) const = 0;							
+	virtual StatusCode update_fluxes(const Vec u, Vec fluxvec, const int faceID) const = 0;							
 
 	/// Computes Cp, Csf, Cl, Cd_p and Cd_sf on one surface
 	/** \param[in] u The multi-vector containing conserved variables
@@ -211,11 +212,17 @@ public:
 				
 	StatusCode compute_fluxvec(const Vec u, Vec fluxvec) const;
 
+	StatusCode update_fluxes(const Vec u, Vec fluxvec, const int faceID) const;
+	void update_fluxvec(const scalar *const u, const scalar *const gradients,
+	                    const scalar *const uleft, const scalar *const uright,
+	                    const scalar *const ug,
+	                    scalar *const farr,const int faceID) const;
 	/// Computes fluxes into the residual vector
 	void compute_fluxes(const scalar *const u, const scalar *const gradients,
 	                    const scalar *const uleft, const scalar *const uright,
 	                    const scalar *const ug,
 	                    scalar *const res) const;
+						
 	/// Computes fluxes vector at all faces
 	void compute_fluxes_vec(const scalar *const u, const scalar *const gradients,
 	                    const scalar *const uleft, const scalar *const uright,
