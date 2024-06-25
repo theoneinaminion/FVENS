@@ -13,6 +13,7 @@
 #include <petscksp.h>
 
 #define PETSCOPTION_STR_LEN 30
+#define USER_PC TRUE
 
 #ifdef USE_BLASTED
 #include <blasted_petsc.h>
@@ -117,6 +118,53 @@ StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,nvars> *const start
                          Blasted_data_list& bctx);
 
 #endif
+
+
+#ifdef USER_PC
+
+template <int nvars,typename scalar>
+class MatrixFreePreconditiner
+{
+	/**
+	 * @brief This is supposed to be an abstract class that would serve as the base class for all user-defined petsc preconditioners. 
+	 * 
+	 */
+	public:
+	/**
+	 * @brief Construct a new Matrix Free Spatial Jacobian object
+	 * 
+	 * @param spatial_discretization the spatial discretization of which this object will act as preconditioner.
+	 */
+	MatrixFreePreconditiner(const Spatial<freal,nvars> *const spatial_discretization, const KSP *const ksp;);
+
+	/// Set the state u and the corresponding residual r(u) 
+	void set_state(const Vec u_state, const Vec r_state);
+	PetscErrorCode pcsetup()
+
+
+	protected:
+	/// Spatial discretization context
+	const Spatial<freal,nvars> *const spatial;
+
+	//KSP context where the preconditioning happens
+	const KSP *const ksp;
+
+	/// step length for finite difference Jacobian
+	freal eps;
+
+	/// The state at which to compute the Jacobian
+	Vec u;
+
+	/// The residual of the state \ref uvec at which to compute the Jacobian
+	Vec res;
+
+};
+
+#endif
+
+
+
+
 
 }
 #endif

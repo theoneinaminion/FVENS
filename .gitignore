@@ -3,6 +3,7 @@
 *~
 
 build/** 
+doc/**
 
 *.vtu
 *.control
@@ -10,6 +11,8 @@ build/**
 *.log
 *.err
 *.out
+*.json
+*.vscode
 
 \#*\#
 
