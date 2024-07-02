@@ -120,7 +120,7 @@ StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,nvars> *const start
 #endif
 
 
-#ifdef USER_PC
+//#ifdef USER_PC
 
 template <int nvars,typename scalar>
 class MatrixFreePreconditiner
@@ -135,22 +135,48 @@ class MatrixFreePreconditiner
 	 * 
 	 * @param spatial_discretization the spatial discretization of which this object will act as preconditioner.
 	 */
-	MatrixFreePreconditiner(const Spatial<freal,nvars> *const spatial_discretization, const KSP *const ksp;);
+	MatrixFreePreconditiner(const Spatial<freal,nvars> *const spatial_discretization);
 
 	/// Set the state u and the corresponding residual r(u) 
 	void set_state(const Vec u_state, const Vec r_state);
-	PetscErrorCode pcsetup()
 
+	/**
+	 * @brief Shell preconditioner apply function using matrix-version of LU-SGS
+	 * 
+	 * @param pc preconditioning context
+	 * @param x  unpreconditioned vector
+	 * @param y  preconditioned vector
+	 * @return PetscErrorCode 
+	 */
+	PetscErrorCode m_LUSGS(PC pc, Vec x, Vec y);
+
+	/**
+	 * @brief Shell preconditioner apply function using matrix-free version of LU-SGS
+	 * 
+	 * @param pc preconditioning context
+	 * @param x  unpreconditioned vector
+	 * @param y  preconditioned vector
+	 * @return PetscErrorCode 
+	 */
+	PetscErrorCode mf_LUSUS(PC pc, Vec x, Vec y);
+
+	/**
+	 * @brief Get the L, U, D parts of the Jacobian where A = L+D+U
+	 * @param Mat the jacobina matrix
+	 */
+	PetscErrorCode get_LUD(Mat A);
 
 	protected:
 	/// Spatial discretization context
-	const Spatial<freal,nvars> *const spatial;
-
-	//KSP context where the preconditioning happens
-	const KSP *const ksp;
+	const Spatial<freal,nvars> *const space;
 
 	/// step length for finite difference Jacobian
 	freal eps;
+
+	//KSP context where the preconditioning happens
+	//const KSP *const ksp;
+
+	
 
 	/// The state at which to compute the Jacobian
 	Vec u;
@@ -158,10 +184,57 @@ class MatrixFreePreconditiner
 	/// The residual of the state \ref uvec at which to compute the Jacobian
 	Vec res;
 
+	//Contituent matrices of the Jacobian A = L+D+U
+	Mat L;
+	Mat D;
+	Mat U;
+	Mat Dinv;
+
 };
 
-#endif
 
+// /**
+//  * @brief Shell preconditioner setup function
+//  * 
+//  * @param pc preconditioning context
+//  * @return PetscErrorCode 
+//  */
+// template <int nvars,typename scalar>
+// PetscErrorCode pcsetup(PC pc);
+
+/**
+ * @brief Shell preconditioner setup function
+ * 
+ * @param pc preconditioning context
+ * @return PetscErrorCode 
+ */
+template <int nvars,typename scalar>
+PetscErrorCode pcsetup(PC pc);
+
+/**
+ * @brief Shell preconditioner apply function
+ * 
+ * @param pc preconditioning context
+ * @param x  unpreconditioned vector
+ * @param y  preconditioned vector
+ * @return PetscErrorCode 
+ */
+template <int nvars,typename scalar>
+PetscErrorCode pcapply(PC pc, Vec x, Vec y);
+
+/**
+ * @brief Shell preconditioner destroy function
+ * 
+ * @param pc preconditioning context
+ * @return PetscErrorCode 
+ */
+template <int nvars,typename scalar>
+PetscErrorCode pcdestroy(PC pc);
+
+//#endif
+
+template <int nvars,typename scalar>
+PetscErrorCode create_shell_precond(const Spatial<freal,nvars> *const spatial, KSP &ksp, PC &pc);
 
 
 

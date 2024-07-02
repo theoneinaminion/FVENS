@@ -384,5 +384,206 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 #endif
 
 
+//################################   SHELL PC ######################################################
+
+template <int nvars,typename scalar>
+MatrixFreePreconditiner<nvars,scalar>::MatrixFreePreconditiner(const Spatial<freal,nvars> *const spatial_discretization)
+	: space{spatial_discretization}, eps{1e-7}
+{
+	PetscBool set = PETSC_FALSE;
+	PetscOptionsGetReal(NULL, NULL, "-matrix_free_difference_step", &eps, &set);
 
 }
+template class MatrixFreePreconditiner<NVARS,freal>;
+template class MatrixFreePreconditiner<1,freal>;
+
+template <int nvars,typename scalar>
+void MatrixFreePreconditiner<nvars,scalar>::set_state(const Vec u_state, const Vec r_state)
+{
+	u = u_state;
+	res = r_state;
+}
+
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_LUD(Mat A)
+{
+	PetscErrorCode ierr = 0;
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&L);CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&U);CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&D);CHKERRQ(ierr);
+
+	PetscInt m;
+	PetscInt n;
+
+	MatGetSize(A, &m, &n); // get matrix size 
+
+	int b = m/nvars;
+	PetscInt rows[nvars];
+	PetscInt cols[nvars];
+	PetscScalar Val[nvars*nvars];
+
+
+
+	for (int i = 0; i < nvars*nvars; i++)
+	{
+
+			Val[i] = 0.0;
+		
+	}
+	
+	const PetscScalar *val1 = Val;
+	for (int i = 0; i < b; i++)
+	{
+
+		int p = i*nvars;
+		for (int j = 0; j < nvars; j++)
+		{
+			rows[j] = p+j;
+			cols[j] = p+j;
+		}
+
+		// zero out the diagonal blocks
+		const PetscInt *rows1 = rows;
+		const PetscInt *cols1 = cols;
+		MatSetValues(L,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+		MatSetValues(U,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+	
+		
+		// Zero out the upper triangular blocks in Lmat and D
+
+		for (int j = i+1; j < b; j++)
+		{
+			for (int k = 0; k<nvars; k++)
+			{
+				cols[k] = cols[k] + nvars;
+
+			}
+			
+			const PetscInt *cols1 = cols;
+			MatSetValues(L,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+			MatSetValues(D,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+		}
+		
+		// zero out the lower triangle blocks in Umat and D
+		for (int j = 0; j < nvars; j++)
+		{
+			
+			cols[j] = rows[j];
+		}
+		for (int j = i-1; j >=0; j--)
+		{
+			for (int k = 0; k<nvars; k++)
+			{
+				cols[k] = cols[k] - nvars;
+
+			}
+			
+			const PetscInt *rows1 = rows;
+			const PetscInt *cols1 = cols;
+			MatSetValues(U,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+			MatSetValues(D,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+		}
+
+	}
+
+	MatAssemblyBegin(L,MAT_FINAL_ASSEMBLY);
+	MatAssemblyEnd(L,MAT_FINAL_ASSEMBLY);
+	MatAssemblyBegin(U,MAT_FINAL_ASSEMBLY);
+	MatAssemblyEnd(U,MAT_FINAL_ASSEMBLY);
+	MatAssemblyBegin(D,MAT_FINAL_ASSEMBLY);
+	MatAssemblyEnd(D,MAT_FINAL_ASSEMBLY);
+	return ierr;
+}
+
+
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec y)
+{
+	PetscErrorCode ierr = 0;
+	return ierr;
+}
+
+
+
+
+
+template <int nvars,typename scalar>
+PetscErrorCode pcapply(PC pc, Vec x, Vec y)
+{
+	PetscErrorCode ierr = 0;
+	MatrixFreePreconditiner<nvars,scalar> *mfpc;
+	ierr = PCShellGetContext(pc, mfpc);CHKERRQ(ierr);
+
+	ierr = mfpc->m_LUSGS(pc, x, y); //Select function manually for now
+	return ierr;
+}
+template
+PetscErrorCode pcapply<NVARS,freal>(PC pc, Vec x, Vec y);
+template
+PetscErrorCode pcapply<1,freal>(PC pc, Vec x, Vec y);
+
+
+
+template <int nvars,typename scalar>
+PetscErrorCode pcsetup(PC pc)
+{
+
+	PetscErrorCode ierr = 0;
+	MatrixFreePreconditiner<nvars,scalar> *mfpc;
+	ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
+	return ierr;
+}
+template
+PetscErrorCode pcsetup<NVARS,freal>(PC pc);
+template
+PetscErrorCode pcsetup<1,freal>(PC pc);
+
+
+template <int nvars,typename scalar>
+PetscErrorCode pcdestroy(PC pc)
+{
+	PetscErrorCode ierr = 0;
+	MatrixFreePreconditiner<nvars,scalar> *mfpc;
+	ierr = PCShellGetContext(pc, mfpc);CHKERRQ(ierr);
+	// if(mfmat->L)
+	// 	ierr = MatDestroy(&(mfmat->L)); CHKERRQ(ierr);
+	// if(mfmat->U)
+	// 	ierr = MatDestroy(&(mfmat->U)); CHKERRQ(ierr);	
+	// if(mfmat->D)
+	// 	ierr = MatDestroy(&(mfmat->D)); CHKERRQ(ierr);
+	// if(mfmat->Dinv)
+	// 	ierr = MatDestroy(&(mfmat->Dinv)); CHKERRQ(ierr);
+
+	
+	ierr = PetscFree(mfpc); CHKERRQ(ierr);		
+	return ierr;
+}
+
+template
+PetscErrorCode pcdestroy<NVARS,freal>(PC pc);
+template
+PetscErrorCode pcdestroy<1,freal>(PC pc);
+
+
+template <int nvars,typename scalar>
+PetscErrorCode create_shell_precond(const Spatial<freal,nvars> *const spatial, KSP &ksp, PC &pc)
+{
+	PetscErrorCode ierr;
+	MatrixFreePreconditiner<nvars,scalar> *const mfpc = new MatrixFreePreconditiner<nvars,scalar>(spatial);
+
+	ierr = PCSetType(pc,PCSHELL);CHKERRQ(ierr);
+	ierr = PCShellSetApply(pc,pcapply<nvars,scalar>);CHKERRQ(ierr);
+	ierr = PCShellSetSetUp(pc,pcsetup<nvars,scalar>);CHKERRQ(ierr);
+	ierr = PCShellSetDestroy(pc,pcdestroy<nvars,scalar>);CHKERRQ(ierr);
+	ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
+	return ierr;
+}
+template
+PetscErrorCode create_shell_precond<NVARS,freal>(const Spatial<freal,NVARS> *const spatial, KSP &ksp, PC &pc);
+template
+PetscErrorCode create_shell_precond<1,freal>(const Spatial<freal,1> *const spatial, KSP &ksp, PC &pc);
+
+
+
+
+} // namespace fvens

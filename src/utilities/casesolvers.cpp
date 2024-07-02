@@ -176,6 +176,19 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 	}
 
 	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
+
+
+	
+
+
+	// if(user_pc)
+	// {	PC pc;
+	// 	MatrixFreePreconditiner<NVARS,PetscScalar> *shell_pc;
+	// 	ierr = KSPGetPC(solver.ksp, &pc); CHKERRQ(ierr);
+	// 	ierr = PCShellSetContext(pc, shell_pc); CHKERRQ(ierr);
+	// 	ierr = PCShellSetApply(pc, shell_pc->pcapply); CHKERRQ(ierr);
+	// 	ierr = PCShellSetDestroy(pc, shell_pc->pcdestroy); CHKERRQ(ierr);
+	// }
 }
 
 FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVARS> *const space,
@@ -196,6 +209,17 @@ FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVA
 
 	setupKSP(solver, use_mfjac);
 	solver.mf_flg = use_mfjac;
+
+	PetscBool user_pc;
+	ierr = PetscOptionsHasName(NULL, NULL, "-shell", &user_pc); 
+	std::cout<<"User PC: "<<user_pc<<std::endl;
+	std::abort();
+	if(user_pc)
+	{
+		PC pc;
+		ierr = KSPGetPC(solver.ksp, &pc);
+		ierr = create_shell_precond<NVARS,freal>(space, solver.ksp,pc); 
+	}
 
 	return solver;
 }
@@ -280,6 +304,12 @@ int SteadyFlowCase::execute_starter(const Spatial<freal,NVARS> *const prob, Vec 
 		ierr = setup_blasted<NVARS>(isol.ksp,u,startprob,bctx1); CHKERRQ(ierr);
 	}
 #endif
+
+// #ifdef USER_PC
+// 	PC shell;
+// 	ierr = KSPGetPC(isol.ksp, &shell); CHKERRQ(ierr); 
+// 	ierr = PCShellSetSetUp(shell, MatrixFreePreconditiner<NVARS,freal>::pcsetup); CHKERRQ(ierr);
+// #endif
 
 	if(mpirank == 0)
 		std::cout << "***\n";
@@ -377,6 +407,8 @@ TimingData SteadyFlowCase::execute_main(const Spatial<freal,NVARS> *const prob, 
 	tdata.precapply_walltime = bctx.applywalltime;
 	tdata.prec_cputime = bctx.factorcputime + bctx.applycputime;
 #endif
+
+
 
 	delete time;
 	delete nlupdate;
