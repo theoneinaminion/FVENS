@@ -158,17 +158,17 @@ class MatrixFreePreconditiner
 	 * @param y  preconditioned vector
 	 * @return PetscErrorCode 
 	 */
-	PetscErrorCode mf_LUSUS(PC pc, Vec x, Vec y);
+	PetscErrorCode mf_LUSGS(PC pc, Vec x, Vec y);
 
 	/**
 	 * @brief Get the L, U, D parts of the Jacobian where A = L+D+U
 	 * @param Mat the jacobina matrix
 	 */
-	PetscErrorCode get_LUD(Mat A);
+	PetscErrorCode get_LUD(Mat &A);
 
 	protected:
 	/// Spatial discretization context
-	const Spatial<freal,nvars> *const space;
+	const Spatial<freal,nvars> *space;
 
 	/// step length for finite difference Jacobian
 	freal eps;
@@ -185,9 +185,9 @@ class MatrixFreePreconditiner
 	Vec res;
 
 	//Contituent matrices of the Jacobian A = L+D+U
-	Mat L;
+	Mat DpL; //D+L
 	Mat D;
-	Mat U;
+	Mat DpU; //D+U
 	Mat Dinv;
 
 };
@@ -234,7 +234,7 @@ PetscErrorCode pcdestroy(PC pc);
 //#endif
 
 template <int nvars,typename scalar>
-PetscErrorCode create_shell_precond(const Spatial<freal,nvars> *const spatial, KSP &ksp, PC &pc);
+PetscErrorCode create_shell_precond(const Spatial<freal,nvars> *const spatial, PC *pc);
 
 
 

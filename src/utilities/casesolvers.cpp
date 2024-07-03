@@ -210,16 +210,16 @@ FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVA
 	setupKSP(solver, use_mfjac);
 	solver.mf_flg = use_mfjac;
 
-	PetscBool user_pc;
-	ierr = PetscOptionsHasName(NULL, NULL, "-shell", &user_pc); 
-	std::cout<<"User PC: "<<user_pc<<std::endl;
-	std::abort();
-	if(user_pc)
-	{
-		PC pc;
-		ierr = KSPGetPC(solver.ksp, &pc);
-		ierr = create_shell_precond<NVARS,freal>(space, solver.ksp,pc); 
-	}
+	// PCType user_pc;
+	// PC pc1;
+	// ierr = KSPGetPC(solver.ksp, &pc1);
+	// ierr = PCGetType(pc1,&user_pc); 
+	
+	// if(strcmp(user_pc,"shell")==0)
+	// {
+	// 	ierr = create_shell_precond<NVARS,freal>(space, pc1); 
+	// 	fvens_throw(ierr, "Setup user-defined preconditioning");
+	// }
 
 	return solver;
 }
@@ -305,6 +305,17 @@ int SteadyFlowCase::execute_starter(const Spatial<freal,NVARS> *const prob, Vec 
 	}
 #endif
 
+	PCType user_pc;
+	PC pc1;
+	ierr = KSPGetPC(isol.ksp, &pc1);
+	ierr = PCGetType(pc1,&user_pc); 
+	
+	if(strcmp(user_pc,"shell")==0)
+	{
+		ierr = create_shell_precond<NVARS,freal>(startprob, &pc1); 
+		fvens_throw(ierr, "Setup user-defined preconditioning");
+	}
+
 // #ifdef USER_PC
 // 	PC shell;
 // 	ierr = KSPGetPC(isol.ksp, &shell); CHKERRQ(ierr); 
@@ -315,6 +326,7 @@ int SteadyFlowCase::execute_starter(const Spatial<freal,NVARS> *const prob, Vec 
 		std::cout << "***\n";
 
 	// computation
+	
 
 	if(opts.usestarter != 0)
 	{
@@ -322,7 +334,7 @@ int SteadyFlowCase::execute_starter(const Spatial<freal,NVARS> *const prob, Vec 
 		// If the starting solve does not converge to the required tolerance, don't throw and
 		// move on.
 		try {
-			ierr = starttime->solve(u); CHKERRQ(ierr);
+			ierr = starttime->solve(u); CHKERRQ(ierr); std::cout<<"CHere 2"<<std::endl;
 		} catch (Tolerance_error& e) {
 			std::cout << e.what() << std::endl;
 		}

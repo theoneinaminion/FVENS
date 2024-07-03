@@ -386,6 +386,9 @@ template StatusCode setup_blasted(KSP ksp, Vec u, const Spatial<freal,1> *const 
 
 //################################   SHELL PC ######################################################
 
+
+
+
 template <int nvars,typename scalar>
 MatrixFreePreconditiner<nvars,scalar>::MatrixFreePreconditiner(const Spatial<freal,nvars> *const spatial_discretization)
 	: space{spatial_discretization}, eps{1e-7}
@@ -394,23 +397,26 @@ MatrixFreePreconditiner<nvars,scalar>::MatrixFreePreconditiner(const Spatial<fre
 	PetscOptionsGetReal(NULL, NULL, "-matrix_free_difference_step", &eps, &set);
 
 }
-template class MatrixFreePreconditiner<NVARS,freal>;
-template class MatrixFreePreconditiner<1,freal>;
+
 
 template <int nvars,typename scalar>
 void MatrixFreePreconditiner<nvars,scalar>::set_state(const Vec u_state, const Vec r_state)
 {
+	std::cout<<"In setting state\n";
 	u = u_state;
 	res = r_state;
 }
 
 template <int nvars,typename scalar>
-PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_LUD(Mat A)
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_LUD(Mat &A)
 {
+	std::cout<<"In making LUD\n";
 	PetscErrorCode ierr = 0;
-	ierr = MatDuplicate(A,MAT_COPY_VALUES,&L);CHKERRQ(ierr);
-	ierr = MatDuplicate(A,MAT_COPY_VALUES,&U);CHKERRQ(ierr);
+	//std::cout<<eps<<std::endl;
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&DpL);CHKERRQ(ierr);
+	ierr = MatDuplicate(A,MAT_COPY_VALUES,&DpU);CHKERRQ(ierr);
 	ierr = MatDuplicate(A,MAT_COPY_VALUES,&D);CHKERRQ(ierr);
+	
 
 	PetscInt m;
 	PetscInt n;
@@ -434,7 +440,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_LUD(Mat A)
 	const PetscScalar *val1 = Val;
 	for (int i = 0; i < b; i++)
 	{
-
+		//std::cout<<i<<std::endl;
 		int p = i*nvars;
 		for (int j = 0; j < nvars; j++)
 		{
@@ -444,11 +450,11 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_LUD(Mat A)
 
 		// zero out the diagonal blocks
 		const PetscInt *rows1 = rows;
-		const PetscInt *cols1 = cols;
-		MatSetValues(L,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
-		MatSetValues(U,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+		//const PetscInt *cols1 = cols;
+		// MatSetValues(DpL,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+		// MatSetValues(DpU,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
 	
-		
+		//Choosing to not zero out diagonals
 		// Zero out the upper triangular blocks in Lmat and D
 
 		for (int j = i+1; j < b; j++)
@@ -460,8 +466,8 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_LUD(Mat A)
 			}
 			
 			const PetscInt *cols1 = cols;
-			MatSetValues(L,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
-			MatSetValues(D,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+			ierr = MatSetValues(DpL,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);CHKERRQ(ierr);
+			ierr = MatSetValues(D,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);CHKERRQ(ierr);
 		}
 		
 		// zero out the lower triangle blocks in Umat and D
@@ -480,41 +486,114 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_LUD(Mat A)
 			
 			const PetscInt *rows1 = rows;
 			const PetscInt *cols1 = cols;
-			MatSetValues(U,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
-			MatSetValues(D,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
+			ierr = MatSetValues(DpU,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);CHKERRQ(ierr);
+			ierr = MatSetValues(D,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);CHKERRQ(ierr);
 		}
 
 	}
 
-	MatAssemblyBegin(L,MAT_FINAL_ASSEMBLY);
-	MatAssemblyEnd(L,MAT_FINAL_ASSEMBLY);
-	MatAssemblyBegin(U,MAT_FINAL_ASSEMBLY);
-	MatAssemblyEnd(U,MAT_FINAL_ASSEMBLY);
-	MatAssemblyBegin(D,MAT_FINAL_ASSEMBLY);
-	MatAssemblyEnd(D,MAT_FINAL_ASSEMBLY);
+	ierr = MatSetType(DpL,MATAIJ);CHKERRQ(ierr); 
+	ierr = MatSetType(DpU,MATAIJ);CHKERRQ(ierr);
+	ierr = MatSetType(D,MATAIJ);CHKERRQ(ierr);
+
+	ierr = MatSetUp(DpL);CHKERRQ(ierr);
+	ierr = MatSetUp(DpU);CHKERRQ(ierr);
+	ierr = MatSetUp(D);CHKERRQ(ierr);
+	std::cout<<"Done setting LUD to AIJ\n";
+
+	ierr =MatAssemblyBegin(DpL,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+	MatAssemblyEnd(DpL,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+	MatAssemblyBegin(DpU,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+	MatAssemblyEnd(DpU,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+	MatAssemblyBegin(D,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+	MatAssemblyEnd(D,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+	std::cout<<"Done making LUD\n";
+
+	Mat temp;
+	ierr = MatDuplicate(DpL,MAT_COPY_VALUES,&temp);CHKERRQ(ierr);
+	//ierr = MatSetup(temp);CHKERRQ(ierr);
+	ierr = MatAXPY(temp,1.0,DpU,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr);
+	ierr = MatAXPY(temp,-1.0,D,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr);
+	ierr = MatAXPY(temp,-1.0,A,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr);
+	PetscReal norm;
+	ierr = MatNorm(temp,NORM_FROBENIUS,&norm);CHKERRQ(ierr);
+	std::cout<<"Norm of L+U+D-A = "<<norm<<std::endl;
 	return ierr;
+
 }
 
 
 template <int nvars,typename scalar>
 PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec y)
 {
+	std::cout<<"In mat LU-SGS apply\n";
 	PetscErrorCode ierr = 0;
+	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
+	ierr = PCShellGetContext(pc, &mfpc);CHKERRQ(ierr);
+	Vec z;
+	ierr = VecDuplicate(mfpc->u, &z);CHKERRQ(ierr);
+
+	//Forward sweep
+	KSP forward;
+	PC forward_pc;
+
+	ierr = KSPCreate(PETSC_COMM_WORLD, &forward);CHKERRQ(ierr);
+	ierr = KSPSetType(forward, KSPRICHARDSON);CHKERRQ(ierr);
+	ierr = KSPGetPC(forward, &forward_pc);CHKERRQ(ierr);
+	ierr = PCSetType(forward_pc, PCSOR);CHKERRQ(ierr);
+
+	ierr = PCSORSetSymmetric(forward_pc, SOR_LOCAL_FORWARD_SWEEP);CHKERRQ(ierr);
+	ierr = PCSORSetOmega(forward_pc, 1.0);CHKERRQ(ierr);
+	ierr = PCSORSetIterations(forward_pc, 1,1);CHKERRQ(ierr);
+
+	ierr = KSPSetOperators(forward, mfpc->DpL, mfpc->DpL);CHKERRQ(ierr);
+	ierr = KSPSolve(forward, x, z);CHKERRQ(ierr);
+
+	//Backward sweep
+	KSP backward;
+	PC backward_pc;
+
+	Vec temp;
+	ierr = VecDuplicate(mfpc->u, &temp);CHKERRQ(ierr);
+
+	ierr = MatMult(mfpc->D, z, temp);CHKERRQ(ierr);
+
+	ierr = KSPCreate(PETSC_COMM_WORLD, &backward);CHKERRQ(ierr);
+	ierr = KSPSetType(backward, KSPRICHARDSON);CHKERRQ(ierr);
+	ierr = KSPGetPC(backward, &backward_pc);CHKERRQ(ierr);
+	ierr = PCSetType(backward_pc, PCSOR);CHKERRQ(ierr);
+
+	ierr = PCSORSetSymmetric(backward_pc, SOR_LOCAL_BACKWARD_SWEEP);CHKERRQ(ierr);
+	ierr = PCSORSetOmega(backward_pc, 1.0);CHKERRQ(ierr);
+
+	ierr = PCSORSetIterations(backward_pc, 1,1);CHKERRQ(ierr);
+
+	ierr = KSPSetOperators(backward, mfpc->DpU, mfpc->DpU);CHKERRQ(ierr);
+	ierr = KSPSolve(backward, temp, y);CHKERRQ(ierr);
+
+	ierr = VecDestroy(&z);CHKERRQ(ierr);
+	ierr = VecDestroy(&temp);CHKERRQ(ierr);
+	ierr = KSPDestroy(&forward);CHKERRQ(ierr);
+	ierr = KSPDestroy(&backward);CHKERRQ(ierr);
+	std::cout<<"Done mat LU-SGS apply\n";
 	return ierr;
 }
 
 
-
+template class MatrixFreePreconditiner<NVARS,freal>;
+template class MatrixFreePreconditiner<1,freal>;
 
 
 template <int nvars,typename scalar>
 PetscErrorCode pcapply(PC pc, Vec x, Vec y)
 {
+	std::cout<<"In PC Apply\n";
 	PetscErrorCode ierr = 0;
-	MatrixFreePreconditiner<nvars,scalar> *mfpc;
-	ierr = PCShellGetContext(pc, mfpc);CHKERRQ(ierr);
+	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
+	ierr = PCShellGetContext(pc, &mfpc);CHKERRQ(ierr);
 
 	ierr = mfpc->m_LUSGS(pc, x, y); //Select function manually for now
+	std::cout<<"Done PC Apply\n";
 	return ierr;
 }
 template
@@ -527,10 +606,16 @@ PetscErrorCode pcapply<1,freal>(PC pc, Vec x, Vec y);
 template <int nvars,typename scalar>
 PetscErrorCode pcsetup(PC pc)
 {
-
+	std::cout<<"In PC Setup\n";
 	PetscErrorCode ierr = 0;
-	MatrixFreePreconditiner<nvars,scalar> *mfpc;
-	ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
+	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
+	ierr = PCShellGetContext(pc,&mfpc);CHKERRQ(ierr);
+
+	//Get the matrix
+	Mat A;
+	ierr = PCGetOperators(pc, &A, NULL);CHKERRQ(ierr);
+	ierr = mfpc->get_LUD(A);CHKERRQ(ierr); //get LU matrices.
+	std::cout<<"Done PC Setup\n";
 	return ierr;
 }
 template
@@ -542,8 +627,9 @@ PetscErrorCode pcsetup<1,freal>(PC pc);
 template <int nvars,typename scalar>
 PetscErrorCode pcdestroy(PC pc)
 {
+	std::cout<<"In PC Destroy\n";
 	PetscErrorCode ierr = 0;
-	MatrixFreePreconditiner<nvars,scalar> *mfpc;
+	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
 	ierr = PCShellGetContext(pc, mfpc);CHKERRQ(ierr);
 	// if(mfmat->L)
 	// 	ierr = MatDestroy(&(mfmat->L)); CHKERRQ(ierr);
@@ -565,23 +651,28 @@ template
 PetscErrorCode pcdestroy<1,freal>(PC pc);
 
 
+
 template <int nvars,typename scalar>
-PetscErrorCode create_shell_precond(const Spatial<freal,nvars> *const spatial, KSP &ksp, PC &pc)
+PetscErrorCode create_shell_precond(const Spatial<freal,nvars> *const spatial, PC *pc)
 {
 	PetscErrorCode ierr;
-	MatrixFreePreconditiner<nvars,scalar> *const mfpc = new MatrixFreePreconditiner<nvars,scalar>(spatial);
+	std::cout<<"In Create Shell Precond\n";
+	MatrixFreePreconditiner<nvars,scalar> *mfpc = new MatrixFreePreconditiner<nvars,scalar>(spatial);
+	//ierr = PetscNew(&mfpc);CHKERRQ(ierr);
 
-	ierr = PCSetType(pc,PCSHELL);CHKERRQ(ierr);
-	ierr = PCShellSetApply(pc,pcapply<nvars,scalar>);CHKERRQ(ierr);
-	ierr = PCShellSetSetUp(pc,pcsetup<nvars,scalar>);CHKERRQ(ierr);
-	ierr = PCShellSetDestroy(pc,pcdestroy<nvars,scalar>);CHKERRQ(ierr);
-	ierr = PCShellSetContext(pc,mfpc);CHKERRQ(ierr);
+	ierr = PCShellSetContext(*pc,mfpc);CHKERRQ(ierr);
+	ierr = PCShellSetSetUp(*pc,pcsetup<nvars,scalar>);CHKERRQ(ierr);
+	ierr = PCShellSetApply(*pc,pcapply<nvars,scalar>);CHKERRQ(ierr);
+	ierr = PCShellSetDestroy(*pc,pcdestroy<nvars,scalar>);CHKERRQ(ierr);
+
+	
 	return ierr;
 }
 template
-PetscErrorCode create_shell_precond<NVARS,freal>(const Spatial<freal,NVARS> *const spatial, KSP &ksp, PC &pc);
+PetscErrorCode create_shell_precond<NVARS,freal>(const Spatial<freal,NVARS> *const spatial, PC *pc);
 template
-PetscErrorCode create_shell_precond<1,freal>(const Spatial<freal,1> *const spatial, KSP &ksp, PC &pc);
+PetscErrorCode create_shell_precond<1,freal>(const Spatial<freal,1> *const spatial,PC *pc);
+
 
 
 

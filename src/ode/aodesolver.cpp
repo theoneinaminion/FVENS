@@ -385,12 +385,27 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 
 	const bool ismatrixfree = isMatrixFree(A);
 	if(ismatrixfree) {
-		MatrixFreeSpatialJacobian<nvars>* mfA = nullptr;
+		MatrixFreeSpatialJacobian<nvars>* mfA;
 		ierr = MatShellGetContext(A, (void**)&mfA); CHKERRQ(ierr);
 		// uvec, rvec and dtm keep getting updated, but pointers to them can be set just once
 		if(mpirank == 0)
 			std::cout << " Setting matfree state" << std::endl;
 		mfA->set_state(uvec,rvec, dtmvec);
+	}
+
+	PC prec; PCType pctype;
+	ierr = KSPGetPC(solver, &prec); CHKERRQ(ierr);
+	ierr = PCGetType(prec, &pctype); CHKERRQ(ierr);
+
+	if(strcmp(pctype,"shell")==0)
+	{
+		//Set the user-defined preconditioner state when using shell preconditioner
+		MatrixFreePreconditiner<nvars,freal> *mfpc = nullptr;
+		ierr = PCShellGetContext(prec, &mfpc);CHKERRQ(ierr);
+		
+		if(mpirank == 0)
+			std::cout << " Setting user preconditioner state" << std::endl;
+		mfpc->set_state(uvec,rvec);	
 	}
 
 	// get list of iterations at which to recompute AMG interpolation operators, if used
