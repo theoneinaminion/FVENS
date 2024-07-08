@@ -580,6 +580,40 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec 
 }
 
 
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::testapply(PC pc, Vec x, Vec y) const
+{
+	PetscErrorCode ierr;
+	ierr = MatMult(Dinv, x, y);CHKERRQ(ierr);
+	return ierr;
+}
+
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc(PC pc)
+{
+	PetscErrorCode ierr = 0;
+	Mat A;
+	ierr = PCGetOperators(pc, NULL, &A);CHKERRQ(ierr);
+	ierr = MatDuplicate(A, MAT_DO_NOT_COPY_VALUES, &Dinv);CHKERRQ(ierr);
+	ierr = MatZeroEntries(Dinv);CHKERRQ(ierr);
+	ierr = MatInvertBlockDiagonalMat(A,Dinv);CHKERRQ(ierr);
+	//ierr = MatTranspose(Dinv, MAT_INPLACE_MATRIX, &Dinv);CHKERRQ(ierr);
+	
+	// Vec invd, d;
+	// ierr = VecDuplicate(u, &d);CHKERRQ(ierr);
+	// ierr = VecDuplicate(u, &invd);CHKERRQ(ierr);
+	// ierr = MatGetDiagonal(A, d);CHKERRQ(ierr);
+	// ierr = MatGetDiagonal(Dinv, invd);CHKERRQ(ierr);
+
+	ierr = writePetscObj(Adiag,"Adiag");CHKERRQ(ierr);
+	// ierr = writePetscObj(d,"d");CHKERRQ(ierr);
+	// ierr = writePetscObj(invd,"invd");CHKERRQ(ierr);
+	return -1;
+	return ierr;
+}
+
+
+
 template class MatrixFreePreconditiner<NVARS,freal>;
 template class MatrixFreePreconditiner<1,freal>;
 
@@ -587,13 +621,13 @@ template class MatrixFreePreconditiner<1,freal>;
 template <int nvars,typename scalar>
 PetscErrorCode pcapply(PC pc, Vec x, Vec y)
 {
-	std::cout<<"In PC Apply\n";
+	//std::cout<<"In PC Apply\n";
 	PetscErrorCode ierr = 0;
 	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
 	ierr = PCShellGetContext(pc, &mfpc);CHKERRQ(ierr);
 
-	ierr = mfpc->m_LUSGS(pc, x, y); //Select function manually for now
-	std::cout<<"Done PC Apply\n";
+	ierr = mfpc->testapply(pc, x, y); //Select function manually for now
+	//std::cout<<"Done PC Apply\n";
 	return ierr;
 }
 template
@@ -606,16 +640,13 @@ PetscErrorCode pcapply<1,freal>(PC pc, Vec x, Vec y);
 template <int nvars,typename scalar>
 PetscErrorCode pcsetup(PC pc)
 {
-	std::cout<<"In PC Setup\n";
+	//std::cout<<"In PC Setup\n";
 	PetscErrorCode ierr = 0;
 	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
-	ierr = PCShellGetContext(pc,&mfpc);CHKERRQ(ierr);
+	ierr = PCShellGetContext(pc, &mfpc);CHKERRQ(ierr);
 
-	//Get the matrix
-	Mat A;
-	ierr = PCGetOperators(pc, &A, NULL);CHKERRQ(ierr);
-	ierr = mfpc->get_LUD(A);CHKERRQ(ierr); //get LU matrices.
-	std::cout<<"Done PC Setup\n";
+	ierr = mfpc->setup_shell_pc(pc);CHKERRQ(ierr);
+	//std::cout<<"Done PC Setup\n";
 	return ierr;
 }
 template
@@ -627,20 +658,11 @@ PetscErrorCode pcsetup<1,freal>(PC pc);
 template <int nvars,typename scalar>
 PetscErrorCode pcdestroy(PC pc)
 {
-	std::cout<<"In PC Destroy\n";
+	//std::cout<<"In PC Destroy\n";
 	PetscErrorCode ierr = 0;
 	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
 	ierr = PCShellGetContext(pc, mfpc);CHKERRQ(ierr);
-	// if(mfmat->L)
-	// 	ierr = MatDestroy(&(mfmat->L)); CHKERRQ(ierr);
-	// if(mfmat->U)
-	// 	ierr = MatDestroy(&(mfmat->U)); CHKERRQ(ierr);	
-	// if(mfmat->D)
-	// 	ierr = MatDestroy(&(mfmat->D)); CHKERRQ(ierr);
-	// if(mfmat->Dinv)
-	// 	ierr = MatDestroy(&(mfmat->Dinv)); CHKERRQ(ierr);
 
-	
 	ierr = PetscFree(mfpc); CHKERRQ(ierr);		
 	return ierr;
 }
@@ -673,7 +695,44 @@ PetscErrorCode create_shell_precond<NVARS,freal>(const Spatial<freal,NVARS> *con
 template
 PetscErrorCode create_shell_precond<1,freal>(const Spatial<freal,1> *const spatial,PC *pc);
 
+PetscErrorCode writePetscObj(Mat &A, std::string name)
+	
+{
 
+	PetscViewer viewer;
+
+	
+
+	const std::string namefin = name + ".m";
+	//PetscCall(MatView(A, PETSC_VIEWER_STDOUT_WORLD));
+	PetscCall(PetscPrintf(PETSC_COMM_WORLD, "writing matrix ...\n"));
+	PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, namefin.c_str(), &viewer));
+	PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));
+	PetscCall(MatView(A, viewer));
+
+	
+	// PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, namefin.c_str(), &viewer));
+	// PetscCall(MatView(v, viewer));
+	PetscCall(PetscViewerDestroy(&viewer));
+	return 0;
+
+} 
+
+PetscErrorCode writePetscObj(Vec &v, std::string name)
+
+{
+
+	PetscViewer viewer;
+	const std::string namefin = name + ".dat";
+	//PetscCall(VecView(v, PETSC_VIEWER_STDOUT_WORLD));
+
+	PetscCall(PetscPrintf(PETSC_COMM_WORLD, "writing vector ...\n"));
+	PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, namefin.c_str(), &viewer));
+	PetscCall(VecView(v, viewer));
+	PetscCall(PetscViewerDestroy(&viewer));
+	return 0;
+
+} 
 
 
 

@@ -166,6 +166,17 @@ class MatrixFreePreconditiner
 	 */
 	PetscErrorCode get_LUD(Mat &A);
 
+	PetscErrorCode testapply(PC pc, Vec x, Vec y) const;
+
+	/**
+	 * @brief Set the up shell pc object
+	 * 
+	 * @param pc 
+	 * @return PetscErrorCode 
+	 */
+	PetscErrorCode setup_shell_pc(PC pc);
+
+
 	protected:
 	/// Spatial discretization context
 	const Spatial<freal,nvars> *space;
@@ -175,8 +186,6 @@ class MatrixFreePreconditiner
 
 	//KSP context where the preconditioning happens
 	//const KSP *const ksp;
-
-	
 
 	/// The state at which to compute the Jacobian
 	Vec u;
@@ -192,15 +201,6 @@ class MatrixFreePreconditiner
 
 };
 
-
-// /**
-//  * @brief Shell preconditioner setup function
-//  * 
-//  * @param pc preconditioning context
-//  * @return PetscErrorCode 
-//  */
-// template <int nvars,typename scalar>
-// PetscErrorCode pcsetup(PC pc);
 
 /**
  * @brief Shell preconditioner setup function
@@ -236,7 +236,9 @@ PetscErrorCode pcdestroy(PC pc);
 template <int nvars,typename scalar>
 PetscErrorCode create_shell_precond(const Spatial<freal,nvars> *const spatial, PC *pc);
 
+PetscErrorCode writePetscObj(Vec &v, std::string name); 
 
+PetscErrorCode writePetscObj(Mat &A, std::string name);
 
 
 }
