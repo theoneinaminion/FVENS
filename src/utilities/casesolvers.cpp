@@ -177,18 +177,6 @@ void FlowCase::setupKSP(LinearProblemLHS& solver, const bool use_mfjac) {
 
 	ierr = KSPSetFromOptions(solver.ksp); petsc_throw(ierr, "KSP set from options");
 
-
-	
-
-
-	// if(user_pc)
-	// {	PC pc;
-	// 	MatrixFreePreconditiner<NVARS,PetscScalar> *shell_pc;
-	// 	ierr = KSPGetPC(solver.ksp, &pc); CHKERRQ(ierr);
-	// 	ierr = PCShellSetContext(pc, shell_pc); CHKERRQ(ierr);
-	// 	ierr = PCShellSetApply(pc, shell_pc->pcapply); CHKERRQ(ierr);
-	// 	ierr = PCShellSetDestroy(pc, shell_pc->pcdestroy); CHKERRQ(ierr);
-	// }
 }
 
 FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVARS> *const space,
@@ -209,17 +197,6 @@ FlowCase::LinearProblemLHS FlowCase::setupImplicitSolver(const Spatial<freal,NVA
 
 	setupKSP(solver, use_mfjac);
 	solver.mf_flg = use_mfjac;
-
-	// PCType user_pc;
-	// PC pc1;
-	// ierr = KSPGetPC(solver.ksp, &pc1);
-	// ierr = PCGetType(pc1,&user_pc); 
-	
-	// if(strcmp(user_pc,"shell")==0)
-	// {
-	// 	ierr = create_shell_precond<NVARS,freal>(space, pc1); 
-	// 	fvens_throw(ierr, "Setup user-defined preconditioning");
-	// }
 
 	return solver;
 }
@@ -316,11 +293,6 @@ int SteadyFlowCase::execute_starter(const Spatial<freal,NVARS> *const prob, Vec 
 		fvens_throw(ierr, "Setup user-defined preconditioning");
 	}
 
-// #ifdef USER_PC
-// 	PC shell;
-// 	ierr = KSPGetPC(isol.ksp, &shell); CHKERRQ(ierr); 
-// 	ierr = PCShellSetSetUp(shell, MatrixFreePreconditiner<NVARS,freal>::pcsetup); CHKERRQ(ierr);
-// #endif
 
 	if(mpirank == 0)
 		std::cout << "***\n";

@@ -169,13 +169,20 @@ class MatrixFreePreconditiner
 	PetscErrorCode testapply(PC pc, Vec x, Vec y) const;
 
 	/**
-	 * @brief Set the up shell pc object
+	 * @brief Set the up shell pc object (wrapper)
 	 * 
 	 * @param pc 
 	 * @return PetscErrorCode 
 	 */
 	PetscErrorCode setup_shell_pc(PC pc);
 
+	/**
+	 * @brief Set the up Data Structures required for Mattrix LUSGS preconditioner
+	 * 
+	 * @param pc 
+	 * @return PetscErrorCode 
+	 */
+	PetscErrorCode setup_shell_pc_mlusgs(PC pc);
 
 	protected:
 	/// Spatial discretization context

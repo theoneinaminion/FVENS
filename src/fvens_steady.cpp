@@ -21,6 +21,10 @@ int main(int argc, char *argv[])
 	ierr = PetscInitialize(&argc,&argv,NULL,help); CHKERRQ(ierr);
 	const int mpirank = get_mpi_rank(PETSC_COMM_WORLD);
 
+	int mpi_size;
+	MPI_Comm_size(PETSC_COMM_WORLD, &mpi_size);
+	std::cout<<"Number of MPI Processes: "<<mpi_size<<std::endl;
+
 	// First set up command line options parsing
 
 	po::options_description desc
@@ -39,7 +43,7 @@ int main(int argc, char *argv[])
 
 	// Mesh
 	const UMesh<freal,NDIM> m = constructMeshFlow(opts, "");
-
+	ierr = PetscOptionsView(NULL, PETSC_VIEWER_STDOUT_WORLD);
 	// solution vector
 	Vec u;
 	ierr = initializeSystemVector(opts, m, &u); CHKERRQ(ierr);

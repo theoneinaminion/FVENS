@@ -1,19 +1,20 @@
-#-ksp_converged_reason
+-ksp_converged_reason
 -options_left
 #-log_view
 
 -mat_type baij
-
+-mat_product_algorithm default
+-mat_product_clear
 -ksp_type fgmres
 -ksp_rtol 1e-1
 -ksp_max_it 20
 
--pc_type bjacobi
+-pc_type shell
 
 -sub_pc_type sor
 -sub_pc_sor_symmetric
 
 #-sub_pc_type shell
 
--blasted_async_sweeps 1,1
--blasted_pc_type sgs
+#-blasted_async_sweeps 1,1
+#-blasted_pc_type sgs

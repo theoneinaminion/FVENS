@@ -589,29 +589,30 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::testapply(PC pc, Vec x, Ve
 }
 
 template <int nvars,typename scalar>
-PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc(PC pc)
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc_mlusgs(PC pc)
 {
 	PetscErrorCode ierr = 0;
-	Mat A;
+	Mat A, Adiag;
 	ierr = PCGetOperators(pc, NULL, &A);CHKERRQ(ierr);
 	ierr = MatDuplicate(A, MAT_DO_NOT_COPY_VALUES, &Dinv);CHKERRQ(ierr);
+	ierr = MatDuplicate(A, MAT_DO_NOT_COPY_VALUES, &Adiag);CHKERRQ(ierr);
 	ierr = MatZeroEntries(Dinv);CHKERRQ(ierr);
+	ierr = MatZeroEntries(Adiag);CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,Dinv);CHKERRQ(ierr);
-	//ierr = MatTranspose(Dinv, MAT_INPLACE_MATRIX, &Dinv);CHKERRQ(ierr);
-	
-	// Vec invd, d;
-	// ierr = VecDuplicate(u, &d);CHKERRQ(ierr);
-	// ierr = VecDuplicate(u, &invd);CHKERRQ(ierr);
-	// ierr = MatGetDiagonal(A, d);CHKERRQ(ierr);
-	// ierr = MatGetDiagonal(Dinv, invd);CHKERRQ(ierr);
 
-	ierr = writePetscObj(Adiag,"Adiag");CHKERRQ(ierr);
-	// ierr = writePetscObj(d,"d");CHKERRQ(ierr);
-	// ierr = writePetscObj(invd,"invd");CHKERRQ(ierr);
+	ierr = MatAssemblyBegin(Dinv, MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+	ierr = MatAssemblyEnd(Dinv, MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 	return -1;
 	return ierr;
 }
 
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc(PC pc)
+{
+	PetscErrorCode ierr = 0;
+	ierr = setup_shell_pc_mlusgs(pc);CHKERRQ(ierr);
+	return ierr;
+}
 
 
 template class MatrixFreePreconditiner<NVARS,freal>;
