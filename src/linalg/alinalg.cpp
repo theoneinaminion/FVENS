@@ -1,4 +1,5 @@
 #include "alinalg.hpp"
+#include "utilities/mpiutils.hpp"
 #include <iostream>
 #include <vector>
 #include <cstring>
@@ -526,12 +527,26 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_LUD(Mat &A)
 template <int nvars,typename scalar>
 PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec y)
 {
-	std::cout<<"In mat LU-SGS apply\n";
+
+	//Details of the Linear system solved for PC:
+	//PC is M = (D+L)D^{-1}(D+U), D+L+U = A; All are block matrices.
+	//The preconditioning step is y = M^{-1}x
+	//So we solve: (D+L)D^{-1}(D+U)y = x
+	//Let D^{-1}(D+U)y = z or (D+U)y = Dz
+	//So we have two sets of lin systems: (D+L)z = x and (D+U)y = Dz
+	//Forward Sweep: Solve (D+L)z = x for z
+	//Backward Sweep: Solve (D+U)y = Dz for y
+
+	// Currently uses Richardson + PCILU for forward and backward sweeps. 
+	// The overall non-lin convergence time is average for shell pc this way when compared to bjacobi+sor as pc for lin system in aodeSolver.cpp it but is manageable as this is needed temprarily. 
+	// Change settings for Richardson and PCILU or use any other combos as needed IN THIS FUNCTION ITSELF.
+
 	PetscErrorCode ierr = 0;
 	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
 	ierr = PCShellGetContext(pc, &mfpc);CHKERRQ(ierr);
 	Vec z;
 	ierr = VecDuplicate(mfpc->u, &z);CHKERRQ(ierr);
+
 
 	//Forward sweep
 	KSP forward;
@@ -540,14 +555,10 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec 
 	ierr = KSPCreate(PETSC_COMM_WORLD, &forward);CHKERRQ(ierr);
 	ierr = KSPSetType(forward, KSPRICHARDSON);CHKERRQ(ierr);
 	ierr = KSPGetPC(forward, &forward_pc);CHKERRQ(ierr);
-	ierr = PCSetType(forward_pc, PCSOR);CHKERRQ(ierr);
-
-	ierr = PCSORSetSymmetric(forward_pc, SOR_LOCAL_FORWARD_SWEEP);CHKERRQ(ierr);
-	ierr = PCSORSetOmega(forward_pc, 1.0);CHKERRQ(ierr);
-	ierr = PCSORSetIterations(forward_pc, 1,1);CHKERRQ(ierr);
-
+	ierr = PCSetType(forward_pc, PCILU);CHKERRQ(ierr);
+	ierr = KSPSetTolerances(forward, 0.5, PETSC_DEFAULT, PETSC_DEFAULT, 5); CHKERRQ(ierr);
 	ierr = KSPSetOperators(forward, mfpc->DpL, mfpc->DpL);CHKERRQ(ierr);
-	ierr = KSPSolve(forward, x, z);CHKERRQ(ierr);
+	ierr = KSPSolve(forward, x, z);CHKERRQ(ierr); // z = (D+L)^{-1}x
 
 	//Backward sweep
 	KSP backward;
@@ -555,27 +566,22 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec 
 
 	Vec temp;
 	ierr = VecDuplicate(mfpc->u, &temp);CHKERRQ(ierr);
-
-	ierr = MatMult(mfpc->D, z, temp);CHKERRQ(ierr);
+	ierr = MatMult(mfpc->D, z, temp);CHKERRQ(ierr); // temp = Dz
 
 	ierr = KSPCreate(PETSC_COMM_WORLD, &backward);CHKERRQ(ierr);
 	ierr = KSPSetType(backward, KSPRICHARDSON);CHKERRQ(ierr);
 	ierr = KSPGetPC(backward, &backward_pc);CHKERRQ(ierr);
-	ierr = PCSetType(backward_pc, PCSOR);CHKERRQ(ierr);
-
-	ierr = PCSORSetSymmetric(backward_pc, SOR_LOCAL_BACKWARD_SWEEP);CHKERRQ(ierr);
-	ierr = PCSORSetOmega(backward_pc, 1.0);CHKERRQ(ierr);
-
-	ierr = PCSORSetIterations(backward_pc, 1,1);CHKERRQ(ierr);
+	ierr = PCSetType(backward_pc, PCILU);CHKERRQ(ierr);
+	ierr = KSPSetTolerances(backward, 0.5, PETSC_DEFAULT, PETSC_DEFAULT, 5); CHKERRQ(ierr);
 
 	ierr = KSPSetOperators(backward, mfpc->DpU, mfpc->DpU);CHKERRQ(ierr);
-	ierr = KSPSolve(backward, temp, y);CHKERRQ(ierr);
+	ierr = KSPSolve(backward, temp, y);CHKERRQ(ierr); // y = (D+U)^{-1}Dz
 
+	//Destroy all the temporary vectors and KSPs
 	ierr = VecDestroy(&z);CHKERRQ(ierr);
 	ierr = VecDestroy(&temp);CHKERRQ(ierr);
 	ierr = KSPDestroy(&forward);CHKERRQ(ierr);
 	ierr = KSPDestroy(&backward);CHKERRQ(ierr);
-	std::cout<<"Done mat LU-SGS apply\n";
 	return ierr;
 }
 
@@ -592,17 +598,16 @@ template <int nvars,typename scalar>
 PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc_mlusgs(PC pc)
 {
 	PetscErrorCode ierr = 0;
-	Mat A, Adiag;
+	Mat A;
 	ierr = PCGetOperators(pc, NULL, &A);CHKERRQ(ierr);
 	ierr = MatDuplicate(A, MAT_DO_NOT_COPY_VALUES, &Dinv);CHKERRQ(ierr);
-	ierr = MatDuplicate(A, MAT_DO_NOT_COPY_VALUES, &Adiag);CHKERRQ(ierr);
 	ierr = MatZeroEntries(Dinv);CHKERRQ(ierr);
-	ierr = MatZeroEntries(Adiag);CHKERRQ(ierr);
 	ierr = MatInvertBlockDiagonalMat(A,Dinv);CHKERRQ(ierr);
 
 	ierr = MatAssemblyBegin(Dinv, MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 	ierr = MatAssemblyEnd(Dinv, MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-	return -1;
+
+	ierr = get_block_LUD(A);CHKERRQ(ierr);
 	return ierr;
 }
 
@@ -614,6 +619,70 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc(PC pc)
 	return ierr;
 }
 
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_block_LUD(Mat &A)
+{
+	PetscErrorCode ierr = 0;
+	MPI_Comm mycomm;
+	ierr = PetscObjectGetComm((PetscObject)A, &mycomm); CHKERRQ(ierr);
+	const int mpisize = get_mpi_size(mycomm);
+	const bool isdistributed = (mpisize > 1);
+
+	ierr = MatDuplicate(A, MAT_COPY_VALUES, &DpL);CHKERRQ(ierr); //D+L
+	ierr = MatDuplicate(A, MAT_COPY_VALUES, &DpU);CHKERRQ(ierr); //D+U
+	ierr = MatDuplicate(A, MAT_DO_NOT_COPY_VALUES, &D);CHKERRQ(ierr); //D initialized to zero
+
+	ierr = MatInvertBlockDiagonalMat(Dinv,D);CHKERRQ(ierr); //it is just easier this way
+	MatAssemblyBegin(D, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+	MatAssemblyEnd(D, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+
+	const UMesh<freal,NDIM> *const m = space->mesh();
+
+	PetscScalar zeros[nvars*nvars];
+	for(int i=0; i<nvars*nvars; i++)
+		zeros[i] = 0.0;
+	
+	//We need to zero out U blocks from DpL and L blocks from DpU
+	for(int i=0; i < m->gnelem(); i++)
+	{
+		const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
+		int nface = m->gnfael(i); //Number of faces of the element
+
+
+		for(int jface=0; jface<nface; jface++)
+		{
+			int nbr_elem = m->gesuel(element,jface); //Neighbour element
+			if (nbr_elem >=m->gnelem()) 
+				continue;
+
+			if(nbr_elem < element) // if mat = 4x4, and i = 3 here, lower triangle elements are all <3. That is the logic.
+			{
+				const int gnbr_elem = isdistributed ? m->gglobalElemIndex(nbr_elem) : nbr_elem;
+				ierr = MatSetValuesBlocked(DpU, 1, &element, 1, &gnbr_elem, zeros, INSERT_VALUES); CHKERRQ(ierr);
+
+			}
+
+			if((nbr_elem > element)) // if mat = 4x4, and i = 3 here, upper triangle elements are all > 3. That is the logic.
+			{
+				//Upper triangular elements satisfy this condition. So, this can be used to zero out U entries in DpL
+				const int gnbr_elem = isdistributed ? m->gglobalElemIndex(nbr_elem) : nbr_elem;
+				ierr = MatSetValuesBlocked(DpL, 1, &element, 1, &gnbr_elem, zeros, INSERT_VALUES); CHKERRQ(ierr);
+
+			}
+		}
+
+
+	}
+
+	MatAssemblyBegin(DpL, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+	MatAssemblyEnd(DpL, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+	MatAssemblyBegin(DpU, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+	MatAssemblyEnd(DpU, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+	return ierr;
+}
 
 template class MatrixFreePreconditiner<NVARS,freal>;
 template class MatrixFreePreconditiner<1,freal>;
@@ -627,7 +696,7 @@ PetscErrorCode pcapply(PC pc, Vec x, Vec y)
 	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
 	ierr = PCShellGetContext(pc, &mfpc);CHKERRQ(ierr);
 
-	ierr = mfpc->testapply(pc, x, y); //Select function manually for now
+	ierr = mfpc->m_LUSGS(pc, x, y); //Select function manually for now
 	//std::cout<<"Done PC Apply\n";
 	return ierr;
 }
@@ -662,9 +731,9 @@ PetscErrorCode pcdestroy(PC pc)
 	//std::cout<<"In PC Destroy\n";
 	PetscErrorCode ierr = 0;
 	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
-	ierr = PCShellGetContext(pc, mfpc);CHKERRQ(ierr);
+	ierr = PCShellGetContext(pc, &mfpc);CHKERRQ(ierr);
 
-	ierr = PetscFree(mfpc); CHKERRQ(ierr);		
+	delete mfpc;		
 	return ierr;
 }
 

@@ -3,8 +3,7 @@
 #-log_view
 
 -mat_type baij
--mat_product_algorithm default
--mat_product_clear
+
 -ksp_type fgmres
 -ksp_rtol 1e-1
 -ksp_max_it 20

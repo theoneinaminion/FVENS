@@ -166,6 +166,21 @@ class MatrixFreePreconditiner
 	 */
 	PetscErrorCode get_LUD(Mat &A);
 
+	/**
+	 * @brief Get the block L, U, D parts of the Jacobian where A = L+D+U
+	 * @param Mat the jacobina matrix
+	 */
+	PetscErrorCode get_block_LUD(Mat &A);
+
+	/**
+	 * @brief Apply function for testing purposes. Temp. TO be deleted
+	 * 
+	 * @param[in] pc 
+	 * @param[in] x Non precond vector
+	 * @param[out] y Precond vector
+	 * @return PetscErrorCode 
+	 */
+
 	PetscErrorCode testapply(PC pc, Vec x, Vec y) const;
 
 	/**
