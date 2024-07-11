@@ -44,6 +44,26 @@ public:
 	/// Test if weighted least-squares reconstruction is '1-exact'
 	int test_oneExact(const std::string reconst_type) const;
 
+	//................. For Matrix-free LU-SGS preconditioning..................//
+	/**
+	 * @brief Assembles flux vector for the whole domain at each face taking into consideration
+	 * the reconstructions, boundaries etc.
+	 * 
+	 * @param[in] uvec 
+	 * @param[out] fluxvec 
+	 * @return StatusCode 
+	 */
+	fvens::StatusCode assemble_fluxvec(const Vec uvec, Vec fluxvec) const{return 0;}	
+	/**
+	 * @brief Assemble flux at a given faceID
+	 * 
+	 * @param[in] uvec state vector 
+	 * @param[out] fluxvec flux vector at a given face 
+	 * @param[in] faceID Face ID 
+	 * @return StatusCode 
+	 */
+	fvens::StatusCode assemble_fluxes_face(const Vec uvec, Vec fluxvec, const int faceID) const{return 0;}
+
 protected:
 	using fvens::Spatial<freal,1>::m;
 	using fvens::Spatial<freal,1>::rch;

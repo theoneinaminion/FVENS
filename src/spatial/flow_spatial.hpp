@@ -106,6 +106,27 @@ public:
 	/// Computes gradients of converved variables
 	void getGradients(const Vec u, GradBlock_t<scalar,NDIM,NVARS> *const grads) const;
 
+	//................ For matrix-free LUSGS preconditioning...........................//
+	/**
+	 * @brief Assembles flux vector for the whole domain at each face taking into consideration
+	 * the reconstructions, boundaries etc. 
+	 * 
+	 * @param[in] uvec 
+	 * @param[out] fluxvec 
+	 * @return StatusCode 
+	 */
+	virtual StatusCode assemble_fluxvec(const Vec uvec, Vec fluxvec) const = 0;
+
+	/**
+	 * @brief Assemble flux at a given faceID
+	 * 
+	 * @param[in] uvec state vector 
+	 * @param[out] fluxvec flux vector at a given face 
+	 * @param[in] faceID Face ID 
+	 * @return StatusCode 
+	 */
+	virtual StatusCode assemble_fluxes_face(const Vec uvec, Vec fluxvec, const int faceID) const=0;
+
 protected:
 
 	using Spatial<scalar,NVARS>::m;
@@ -227,7 +248,62 @@ public:
 	void compute_local_jacobian_boundary(const fint iface,
 	                                     const freal *const ul,
 	                                     Eigen::Matrix<freal,NVARS,NVARS,Eigen::RowMajor>& L) const;
+	
+	//................. For Matrix-free LU-SGS preconditioning..................//
 
+	/**
+	 * @brief Assembles flux vector for the whole domain at each face taking into consideration
+	 * the reconstructions, boundaries etc.
+	 * 
+	 * @param[in] uvec 
+	 * @param[out] fluxvec 
+	 * @return StatusCode 
+	 */
+	StatusCode assemble_fluxvec(const Vec uvec, Vec fluxvec) const;	
+
+	/**
+	 * @brief Calculate the flux vector (inviscid and viscous) at each face.
+	 * 
+	 * @param[in] u State vector
+	 * @param[in] gradients gradients of the state vector
+	 * @param[in] uleft left states of the faces
+	 * @param[in] uright right states of the faces
+	 * @param[in] ug boundary information
+	 * 
+	 * @param[out] farr flux vector array
+	 */
+	void compute_fluxvec(const scalar *const u, const scalar *const gradients,
+                 const scalar *const uleft, const scalar *const uright,
+                 const scalar *const ug,
+                 scalar *const farr) const;
+
+	/**
+	 * @brief Assemble flux at a given faceID
+	 * 
+	 * @param[in] uvec state vector 
+	 * @param[out] fluxvec flux vector at a given face 
+	 * @param[in] faceID Face ID 
+	 * @return StatusCode 
+	 */
+	StatusCode assemble_fluxes_face(const Vec uvec, Vec fluxvec, const int faceID) const;			 
+	
+	/**
+	 * @brief Calculate flux vector at a given face ID.
+	 * 
+	 * @param[in] u State vector
+	 * @param[in] gradients gradients of the state vector
+	 * @param[in] uleft left states of the faces
+	 * @param[in] uright right states of the faces
+	 * @param[in] ug boundary information
+	 * 
+	 * @param[out] farr flux vector array
+	 * 
+	 * @param[in] faceID Face ID
+	 */
+	void calculate_fluxvec_face(const scalar *const u, const scalar *const gradients,
+	                    const scalar *const uleft, const scalar *const uright,
+	                    const scalar *const ug,
+	                    scalar *const farr,const int faceID) const;
 protected:
 	using Spatial<scalar,NVARS>::m;
 	using Spatial<scalar,NVARS>::rcvec;

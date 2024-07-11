@@ -409,192 +409,6 @@ void MatrixFreePreconditiner<nvars,scalar>::set_state(const Vec u_state, const V
 }
 
 template <int nvars,typename scalar>
-PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_LUD(Mat &A)
-{
-	std::cout<<"In making LUD\n";
-	PetscErrorCode ierr = 0;
-	//std::cout<<eps<<std::endl;
-	ierr = MatDuplicate(A,MAT_COPY_VALUES,&DpL);CHKERRQ(ierr);
-	ierr = MatDuplicate(A,MAT_COPY_VALUES,&DpU);CHKERRQ(ierr);
-	ierr = MatDuplicate(A,MAT_COPY_VALUES,&D);CHKERRQ(ierr);
-	
-
-	PetscInt m;
-	PetscInt n;
-
-	MatGetSize(A, &m, &n); // get matrix size 
-
-	int b = m/nvars;
-	PetscInt rows[nvars];
-	PetscInt cols[nvars];
-	PetscScalar Val[nvars*nvars];
-
-
-
-	for (int i = 0; i < nvars*nvars; i++)
-	{
-
-			Val[i] = 0.0;
-		
-	}
-	
-	const PetscScalar *val1 = Val;
-	for (int i = 0; i < b; i++)
-	{
-		//std::cout<<i<<std::endl;
-		int p = i*nvars;
-		for (int j = 0; j < nvars; j++)
-		{
-			rows[j] = p+j;
-			cols[j] = p+j;
-		}
-
-		// zero out the diagonal blocks
-		const PetscInt *rows1 = rows;
-		//const PetscInt *cols1 = cols;
-		// MatSetValues(DpL,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
-		// MatSetValues(DpU,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);
-	
-		//Choosing to not zero out diagonals
-		// Zero out the upper triangular blocks in Lmat and D
-
-		for (int j = i+1; j < b; j++)
-		{
-			for (int k = 0; k<nvars; k++)
-			{
-				cols[k] = cols[k] + nvars;
-
-			}
-			
-			const PetscInt *cols1 = cols;
-			ierr = MatSetValues(DpL,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);CHKERRQ(ierr);
-			ierr = MatSetValues(D,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);CHKERRQ(ierr);
-		}
-		
-		// zero out the lower triangle blocks in Umat and D
-		for (int j = 0; j < nvars; j++)
-		{
-			
-			cols[j] = rows[j];
-		}
-		for (int j = i-1; j >=0; j--)
-		{
-			for (int k = 0; k<nvars; k++)
-			{
-				cols[k] = cols[k] - nvars;
-
-			}
-			
-			const PetscInt *rows1 = rows;
-			const PetscInt *cols1 = cols;
-			ierr = MatSetValues(DpU,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);CHKERRQ(ierr);
-			ierr = MatSetValues(D,nvars,rows1,nvars,cols1,val1,INSERT_VALUES);CHKERRQ(ierr);
-		}
-
-	}
-
-	ierr = MatSetType(DpL,MATAIJ);CHKERRQ(ierr); 
-	ierr = MatSetType(DpU,MATAIJ);CHKERRQ(ierr);
-	ierr = MatSetType(D,MATAIJ);CHKERRQ(ierr);
-
-	ierr = MatSetUp(DpL);CHKERRQ(ierr);
-	ierr = MatSetUp(DpU);CHKERRQ(ierr);
-	ierr = MatSetUp(D);CHKERRQ(ierr);
-	std::cout<<"Done setting LUD to AIJ\n";
-
-	ierr =MatAssemblyBegin(DpL,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-	MatAssemblyEnd(DpL,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-	MatAssemblyBegin(DpU,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-	MatAssemblyEnd(DpU,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-	MatAssemblyBegin(D,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-	MatAssemblyEnd(D,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-	std::cout<<"Done making LUD\n";
-
-	Mat temp;
-	ierr = MatDuplicate(DpL,MAT_COPY_VALUES,&temp);CHKERRQ(ierr);
-	//ierr = MatSetup(temp);CHKERRQ(ierr);
-	ierr = MatAXPY(temp,1.0,DpU,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr);
-	ierr = MatAXPY(temp,-1.0,D,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr);
-	ierr = MatAXPY(temp,-1.0,A,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr);
-	PetscReal norm;
-	ierr = MatNorm(temp,NORM_FROBENIUS,&norm);CHKERRQ(ierr);
-	std::cout<<"Norm of L+U+D-A = "<<norm<<std::endl;
-	return ierr;
-
-}
-
-
-template <int nvars,typename scalar>
-PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec y)
-{
-
-	//Details of the Linear system solved for PC:
-	//PC is M = (D+L)D^{-1}(D+U), D+L+U = A; All are block matrices.
-	//The preconditioning step is y = M^{-1}x
-	//So we solve: (D+L)D^{-1}(D+U)y = x
-	//Let D^{-1}(D+U)y = z or (D+U)y = Dz
-	//So we have two sets of lin systems: (D+L)z = x and (D+U)y = Dz
-	//Forward Sweep: Solve (D+L)z = x for z
-	//Backward Sweep: Solve (D+U)y = Dz for y
-
-	// Currently uses Richardson + PCILU for forward and backward sweeps. 
-	// The overall non-lin convergence time is average for shell pc this way when compared to bjacobi+sor as pc for lin system in aodeSolver.cpp it but is manageable as this is needed temprarily. 
-	// Change settings for Richardson and PCILU or use any other combos as needed IN THIS FUNCTION ITSELF.
-
-	PetscErrorCode ierr = 0;
-	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
-	ierr = PCShellGetContext(pc, &mfpc);CHKERRQ(ierr);
-	Vec z;
-	ierr = VecDuplicate(mfpc->u, &z);CHKERRQ(ierr);
-
-
-	//Forward sweep
-	KSP forward;
-	PC forward_pc;
-
-	ierr = KSPCreate(PETSC_COMM_WORLD, &forward);CHKERRQ(ierr);
-	ierr = KSPSetType(forward, KSPRICHARDSON);CHKERRQ(ierr);
-	ierr = KSPGetPC(forward, &forward_pc);CHKERRQ(ierr);
-	ierr = PCSetType(forward_pc, PCILU);CHKERRQ(ierr);
-	ierr = KSPSetTolerances(forward, 0.5, PETSC_DEFAULT, PETSC_DEFAULT, 5); CHKERRQ(ierr);
-	ierr = KSPSetOperators(forward, mfpc->DpL, mfpc->DpL);CHKERRQ(ierr);
-	ierr = KSPSolve(forward, x, z);CHKERRQ(ierr); // z = (D+L)^{-1}x
-
-	//Backward sweep
-	KSP backward;
-	PC backward_pc;
-
-	Vec temp;
-	ierr = VecDuplicate(mfpc->u, &temp);CHKERRQ(ierr);
-	ierr = MatMult(mfpc->D, z, temp);CHKERRQ(ierr); // temp = Dz
-
-	ierr = KSPCreate(PETSC_COMM_WORLD, &backward);CHKERRQ(ierr);
-	ierr = KSPSetType(backward, KSPRICHARDSON);CHKERRQ(ierr);
-	ierr = KSPGetPC(backward, &backward_pc);CHKERRQ(ierr);
-	ierr = PCSetType(backward_pc, PCILU);CHKERRQ(ierr);
-	ierr = KSPSetTolerances(backward, 0.5, PETSC_DEFAULT, PETSC_DEFAULT, 5); CHKERRQ(ierr);
-
-	ierr = KSPSetOperators(backward, mfpc->DpU, mfpc->DpU);CHKERRQ(ierr);
-	ierr = KSPSolve(backward, temp, y);CHKERRQ(ierr); // y = (D+U)^{-1}Dz
-
-	//Destroy all the temporary vectors and KSPs
-	ierr = VecDestroy(&z);CHKERRQ(ierr);
-	ierr = VecDestroy(&temp);CHKERRQ(ierr);
-	ierr = KSPDestroy(&forward);CHKERRQ(ierr);
-	ierr = KSPDestroy(&backward);CHKERRQ(ierr);
-	return ierr;
-}
-
-
-template <int nvars,typename scalar>
-PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::testapply(PC pc, Vec x, Vec y) const
-{
-	PetscErrorCode ierr;
-	ierr = MatMult(Dinv, x, y);CHKERRQ(ierr);
-	return ierr;
-}
-
-template <int nvars,typename scalar>
 PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc_mlusgs(PC pc)
 {
 	PetscErrorCode ierr = 0;
@@ -608,14 +422,6 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc_mlusgs(PC p
 	ierr = MatAssemblyEnd(Dinv, MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 
 	ierr = get_block_LUD(A);CHKERRQ(ierr);
-	return ierr;
-}
-
-template <int nvars,typename scalar>
-PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc(PC pc)
-{
-	PetscErrorCode ierr = 0;
-	ierr = setup_shell_pc_mlusgs(pc);CHKERRQ(ierr);
 	return ierr;
 }
 
@@ -653,6 +459,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_block_LUD(Mat &A)
 		for(int jface=0; jface<nface; jface++)
 		{
 			int nbr_elem = m->gesuel(element,jface); //Neighbour element
+			
 			if (nbr_elem >=m->gnelem()) 
 				continue;
 
@@ -684,6 +491,179 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::get_block_LUD(Mat &A)
 	return ierr;
 }
 
+
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec y)
+{
+
+	//Details of the Linear system solved for PC:
+	//PC is M = (D+L)D^{-1}(D+U), D+L+U = A; All are block matrices.
+	//The preconditioning step is y = M^{-1}x
+	//So we solve: (D+L)D^{-1}(D+U)y = x
+	//Let D^{-1}(D+U)y = z or (D+U)y = Dz
+	//So we have two sets of lin systems: (D+L)z = x and (D+U)y = Dz
+	//Forward Sweep: Solve (D+L)z = x for z
+	//Backward Sweep: Solve (D+U)y = Dz for y
+
+	// Currently uses Richardson + PCILU for forward and backward sweeps. 
+	// The overall non-lin convergence time is average for shell pc this way when compared to bjacobi+sor as pc for lin system in aodeSolver.cpp it but is manageable as this is needed temprarily. 
+	// Change settings for Richardson and PCILU or use any other combos as needed IN THIS FUNCTION ITSELF.
+
+	PetscErrorCode ierr = 0;
+	Vec z;
+	ierr = VecDuplicate(u, &z);CHKERRQ(ierr);
+
+
+	//Forward sweep
+	KSP forward;
+	PC forward_pc;
+
+	ierr = KSPCreate(PETSC_COMM_WORLD, &forward);CHKERRQ(ierr);
+	ierr = KSPSetType(forward, KSPRICHARDSON);CHKERRQ(ierr);
+	ierr = KSPGetPC(forward, &forward_pc);CHKERRQ(ierr);
+	ierr = PCSetType(forward_pc, PCILU);CHKERRQ(ierr);
+	ierr = KSPSetTolerances(forward, 0.5, PETSC_DEFAULT, PETSC_DEFAULT, 5); CHKERRQ(ierr);
+	ierr = KSPSetOperators(forward, DpL, DpL);CHKERRQ(ierr);
+	ierr = KSPSolve(forward, x, z);CHKERRQ(ierr); // z = (D+L)^{-1}x
+
+	//Backward sweep
+	KSP backward;
+	PC backward_pc;
+
+	Vec temp;
+	ierr = VecDuplicate(u, &temp);CHKERRQ(ierr);
+	ierr = MatMult(D, z, temp);CHKERRQ(ierr); // temp = Dz
+
+	ierr = KSPCreate(PETSC_COMM_WORLD, &backward);CHKERRQ(ierr);
+	ierr = KSPSetType(backward, KSPRICHARDSON);CHKERRQ(ierr);
+	ierr = KSPGetPC(backward, &backward_pc);CHKERRQ(ierr);
+	ierr = PCSetType(backward_pc, PCILU);CHKERRQ(ierr);
+	ierr = KSPSetTolerances(backward, 0.5, PETSC_DEFAULT, PETSC_DEFAULT, 5); CHKERRQ(ierr);
+
+	ierr = KSPSetOperators(backward, DpU, DpU);CHKERRQ(ierr);
+	ierr = KSPSolve(backward, temp, y);CHKERRQ(ierr); // y = (D+U)^{-1}Dz
+
+	//Destroy all the temporary vectors and KSPs
+	ierr = VecDestroy(&z);CHKERRQ(ierr);
+	ierr = VecDestroy(&temp);CHKERRQ(ierr);
+	ierr = KSPDestroy(&forward);CHKERRQ(ierr);
+	ierr = KSPDestroy(&backward);CHKERRQ(ierr);
+	return ierr;
+}
+
+
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc_mf_lusgs(PC pc)
+{
+	PetscErrorCode ierr = 0;
+	Mat A;
+	ierr = PCGetOperators(pc, NULL, &A);CHKERRQ(ierr);
+	ierr = MatDuplicate(A, MAT_DO_NOT_COPY_VALUES, &Dinv);CHKERRQ(ierr);
+	ierr = MatDuplicate(A, MAT_DO_NOT_COPY_VALUES, &D);CHKERRQ(ierr);
+	ierr = MatInvertBlockDiagonalMat(A,Dinv);CHKERRQ(ierr);
+
+	ierr = MatAssemblyBegin(Dinv, MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+	ierr = MatAssemblyEnd(Dinv, MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+
+	//Calculate fluxes at state u.
+	const UMesh<freal,NDIM> *const m = space->mesh();
+	const std::vector<fint> globindices = m->getConnectivityGlobalIndices();
+
+	ierr = VecCreateGhostBlock(PETSC_COMM_WORLD, nvars, (m->gninface()+m->gnbface())*nvars,
+	                           m->gnaface()*nvars, m->gnConnFace(),
+	                           globindices.data(), &fluxvec);CHKERRQ(ierr);
+
+	ierr = space->assemble_fluxvec(u, fluxvec);CHKERRQ(ierr);
+	ierr = get_block_LUD(A);CHKERRQ(ierr);
+	return ierr;
+}
+
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec y)
+{
+	//Testing: L*vec = flux(u+epsilon*vec) - flux(uvec) when the diff is taken only at left elements
+
+	PetscErrorCode ierr = 0;
+
+	Vec v;
+	ierr = VecDuplicate(u, &v);CHKERRQ(ierr);
+	PetscRandom rctx;
+    ierr = PetscRandomCreate(PETSC_COMM_WORLD, &rctx);CHKERRQ(ierr);
+	unsigned long seed = 69;
+	ierr = PetscRandomSetSeed(rctx, seed);CHKERRQ(ierr);
+    ierr = PetscRandomSetFromOptions(rctx);CHKERRQ(ierr);
+    ierr = VecSetRandom(v, rctx);CHKERRQ(ierr);
+    ierr = PetscRandomDestroy(&rctx);CHKERRQ(ierr);
+	ierr = VecShift(v, 0.1);CHKERRQ(ierr); //ensures non-zero vec
+
+	Mat L;
+	ierr = MatDuplicate(DpL, MAT_COPY_VALUES, &L);CHKERRQ(ierr);
+	ierr = MatAXPY(L, -1.0, D,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr); //L = L-D
+	
+
+	MPI_Comm mycomm;
+	ierr = PetscObjectGetComm((PetscObject)u, &mycomm); CHKERRQ(ierr);
+	const int mpisize = get_mpi_size(mycomm);
+	const bool isdistributed = (mpisize > 1);
+
+	Vec z,upert,prod;
+	ierr = VecDuplicate(u, &z);CHKERRQ(ierr);
+	ierr = VecDuplicate(u, &upert);CHKERRQ(ierr);
+
+	ierr = VecDuplicate(u, &prod);CHKERRQ(ierr); //Test
+	ierr = VecWAXPY(upert, 1.0, v, u);CHKERRQ(ierr); //z = u + x//Test
+
+	const UMesh<freal,NDIM> *const m = space->mesh();
+	Vec pertflux; //perturbed flux vector at a given face.
+	ierr = VecCreate(PETSC_COMM_WORLD, &pertflux);CHKERRQ(ierr);
+	ierr = VecSetSizes(pertflux,nvars, PETSC_DETERMINE);
+
+	ierr = space->assemble_fluxes(upert, pertflux);CHKERRQ(ierr);//Test
+
+	for(fint i = 0; i < m->gnelem(); i++)
+	{
+		const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
+		int nface = m->gnfael(i); //Number of faces of the element
+
+		for(int jface=0; jface<nface ; jface++)
+		{
+			int nbr_elem = m->gesuel(element,jface); //Neighbour element
+
+			if (nbr_elem >=m->gnelem()) 
+				continue;
+
+			if(nbr_elem < element) // if mat = 4x4, and i = 3 here, lower triangle elements are all <3. That is the logic.
+			{
+				// We are at L part
+				//TODO: Take diff pertflux and fluxvec here and put it inside prod. The check is Lv = prod or not.
+			}
+		}
+	}
+
+	return ierr;
+
+}
+
+
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::testapply(PC pc, Vec x, Vec y) const
+{
+	PetscErrorCode ierr;
+	ierr = MatMult(Dinv, x, y);CHKERRQ(ierr);
+	return ierr;
+}
+
+
+
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc(PC pc)
+{
+	PetscErrorCode ierr = 0;
+	ierr = setup_shell_pc_mf_lusgs(pc);CHKERRQ(ierr);
+	return ierr;
+}
+
+
 template class MatrixFreePreconditiner<NVARS,freal>;
 template class MatrixFreePreconditiner<1,freal>;
 
@@ -696,7 +676,7 @@ PetscErrorCode pcapply(PC pc, Vec x, Vec y)
 	MatrixFreePreconditiner<nvars,scalar> *mfpc = nullptr;
 	ierr = PCShellGetContext(pc, &mfpc);CHKERRQ(ierr);
 
-	ierr = mfpc->m_LUSGS(pc, x, y); //Select function manually for now
+	ierr = mfpc->mf_LUSGS(pc, x, y); //Select function manually for now
 	//std::cout<<"Done PC Apply\n";
 	return ierr;
 }

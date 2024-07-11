@@ -161,12 +161,6 @@ class MatrixFreePreconditiner
 	PetscErrorCode mf_LUSGS(PC pc, Vec x, Vec y);
 
 	/**
-	 * @brief Get the L, U, D parts of the Jacobian where A = L+D+U
-	 * @param Mat the jacobina matrix
-	 */
-	PetscErrorCode get_LUD(Mat &A);
-
-	/**
 	 * @brief Get the block L, U, D parts of the Jacobian where A = L+D+U
 	 * @param Mat the jacobina matrix
 	 */
@@ -199,6 +193,15 @@ class MatrixFreePreconditiner
 	 */
 	PetscErrorCode setup_shell_pc_mlusgs(PC pc);
 
+	/**
+	 * @brief Set the up Data Structures required for Matrix-free LUSGS preconditioner
+	 * 
+	 * @param pc 
+	 * @return PetscErrorCode 
+	 */
+	
+	PetscErrorCode setup_shell_pc_mf_lusgs(PC pc);
+
 	protected:
 	/// Spatial discretization context
 	const Spatial<freal,nvars> *space;
@@ -214,6 +217,9 @@ class MatrixFreePreconditiner
 
 	/// The residual of the state \ref uvec at which to compute the Jacobian
 	Vec res;
+
+	//Vector that stores fluxes at all the faces at the flow state "u". Used on Mat-free LU-SGS
+	Vec fluxvec;
 
 	//Contituent matrices of the Jacobian A = L+D+U
 	Mat DpL; //D+L

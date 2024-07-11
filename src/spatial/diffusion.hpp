@@ -27,6 +27,26 @@ public:
 	
 	virtual ~Diffusion();
 
+//.................... For matrix-free LU-SGS preconditioning....................//
+/**
+ * @brief Calculates flux vector for the whole domain at each face
+ * 
+ * @param[in] uvec 
+ * @param[out] fluxvec 
+ * @return StatusCode 
+ */
+StatusCode assemble_fluxvec(const Vec uvec, Vec fluxvec) const {return 0;}
+
+/**
+	 * @brief Assemble flux at a given faceID
+	 * 
+	 * @param[in] uvec state vector 
+	 * @param[out] fluxvec flux vector at a given face 
+	 * @param[in] faceID Face ID 
+	 * @return StatusCode 
+ */
+StatusCode assemble_fluxes_face(const Vec uvec, Vec fluxvec, const int faceID) const{return 0;}
+
 protected:
 	using Spatial<freal,nvars>::m;
 	using Spatial<freal,nvars>::rcvec;

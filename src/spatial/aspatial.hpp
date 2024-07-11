@@ -97,6 +97,26 @@ public:
 		return m;
 	}
 
+	//.................... For matrix-free LU-SGS preconditioning....................//
+	/**
+	 * @brief Calculates flux vector for the whole domain at each face
+	 * 
+	 * @param[in] uvec 
+	 * @param[out] fluxvec 
+	 * @return StatusCode 
+	 */
+	virtual StatusCode assemble_fluxvec(const Vec uvec, Vec fluxvec) const = 0;
+
+	/**
+	 * @brief Assemble flux at a given faceID
+	 * 
+	 * @param[in] uvec state vector 
+	 * @param[out] fluxvec flux vector at a given face 
+	 * @param[in] faceID Face ID 
+	 * @return StatusCode 
+	 */
+	virtual StatusCode assemble_fluxes_face(const Vec uvec, Vec fluxvec, const int faceID) const=0;
+
 protected:
 	/// Mesh context
 	const UMesh<scalar,NDIM> *const m;
