@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstring>
 #include <limits>
+#include <numeric>
 
 namespace fvens {
 
@@ -587,19 +588,23 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 
 	Vec v;
 	ierr = VecDuplicate(u, &v);CHKERRQ(ierr);
-	PetscRandom rctx;
-    ierr = PetscRandomCreate(PETSC_COMM_WORLD, &rctx);CHKERRQ(ierr);
-	unsigned long seed = 69;
-	ierr = PetscRandomSetSeed(rctx, seed);CHKERRQ(ierr);
-    ierr = PetscRandomSetFromOptions(rctx);CHKERRQ(ierr);
-    ierr = VecSetRandom(v, rctx);CHKERRQ(ierr);
-    ierr = PetscRandomDestroy(&rctx);CHKERRQ(ierr);
-	ierr = VecShift(v, 0.1);CHKERRQ(ierr); //ensures non-zero vec
+	ierr = VecSet(v, 0.0);CHKERRQ(ierr);
+	ierr = VecSetValue(v, 1, 1.0, INSERT_VALUES);CHKERRQ(ierr);
+	writePetscObj(v, "v");
+	//ierr = VecShift(v, 0.1);CHKERRQ(ierr); 
+	// PetscRandom rctx;
+    // ierr = PetscRandomCreate(PETSC_COMM_WORLD, &rctx);CHKERRQ(ierr);
+	// unsigned long seed = 69;
+	// ierr = PetscRandomSetSeed(rctx, seed);CHKERRQ(ierr);
+    // ierr = PetscRandomSetFromOptions(rctx);CHKERRQ(ierr);
+    // ierr = VecSetRandom(v, rctx);CHKERRQ(ierr);
+    // ierr = PetscRandomDestroy(&rctx);CHKERRQ(ierr);
+	// ierr = VecShift(v, 0.1);CHKERRQ(ierr); //ensures non-zero vec
 
 	Mat L;
 	ierr = MatDuplicate(DpL, MAT_COPY_VALUES, &L);CHKERRQ(ierr);
 	ierr = MatAXPY(L, -1.0, D,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr); //L = L-D
-	
+	writePetscObj(L, "L");
 
 	MPI_Comm mycomm;
 	ierr = PetscObjectGetComm((PetscObject)u, &mycomm); CHKERRQ(ierr);
@@ -612,18 +617,26 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 
 	ierr = VecDuplicate(u, &prod);CHKERRQ(ierr); //Test
 	ierr = VecWAXPY(upert, 1.0, v, u);CHKERRQ(ierr); //z = u + x//Test
+	
 
 	const UMesh<freal,NDIM> *const m = space->mesh();
 	Vec pertflux; //perturbed flux vector at a given face.
-	ierr = VecCreate(PETSC_COMM_WORLD, &pertflux);CHKERRQ(ierr);
-	ierr = VecSetSizes(pertflux,nvars, PETSC_DETERMINE);
+	ierr = VecDuplicate(fluxvec, &pertflux);CHKERRQ(ierr);
+	// ierr = VecCreate(PETSC_COMM_WORLD, &pertflux);CHKERRQ(ierr);
+	// ierr = VecSetSizes(pertflux,nvars, PETSC_DETERMINE);
+	ierr = space->assemble_fluxvec(upert, pertflux);CHKERRQ(ierr);//Test
 
-	ierr = space->assemble_fluxes(upert, pertflux);CHKERRQ(ierr);//Test
 
 	for(fint i = 0; i < m->gnelem(); i++)
 	{
 		const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
 		int nface = m->gnfael(i); //Number of faces of the element
+
+		PetscScalar sum[nvars];
+		ierr = PetscArrayzero(sum,nvars);CHKERRQ(ierr);
+
+		PetscInt idx[nvars];
+		std::iota(idx, idx + nvars, element * nvars);
 
 		for(int jface=0; jface<nface ; jface++)
 		{
@@ -631,15 +644,40 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 
 			if (nbr_elem >=m->gnelem()) 
 				continue;
-
+			
 			if(nbr_elem < element) // if mat = 4x4, and i = 3 here, lower triangle elements are all <3. That is the logic.
 			{
 				// We are at L part
 				//TODO: Take diff pertflux and fluxvec here and put it inside prod. The check is Lv = prod or not.
+				//const fint faceID = gelemface(element,jface); //Needed for later.
+
+				for(int k = 0; k<nvars; k++)
+				{
+					PetscScalar pertfluxval, fluxvecval;
+					int id = nbr_elem*nvars+k;
+					ierr = VecGetValues(pertflux, 1, &id, &pertfluxval);CHKERRQ(ierr);
+					ierr = VecGetValues(fluxvec, 1, &id, &fluxvecval);CHKERRQ(ierr);
+					
+					sum[k] += pertfluxval - fluxvecval;
+				}
 			}
 		}
+
+
+		ierr = VecSetValues(prod, nvars, idx, sum, INSERT_VALUES);CHKERRQ(ierr);
+		ierr = VecAssemblyBegin(prod);CHKERRQ(ierr);
+		ierr = VecAssemblyEnd(prod);CHKERRQ(ierr);
 	}
 
+
+
+	Vec aprod;
+	ierr = VecDuplicate(u, &aprod);CHKERRQ(ierr);
+	ierr = MatMult(L, v,aprod);CHKERRQ(ierr); //aprod = L*v
+
+	writePetscObj(aprod, "aprod");
+	writePetscObj(prod, "prod");
+	std::abort();
 	return ierr;
 
 }
