@@ -570,7 +570,8 @@ StatusCode SteadyBackwardEulerSolver<nvars>::solve(Vec uvec)
 			}
 		}
 
-		ierr = VecGhostUpdateEnd(uvec, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+		ierr = VecGhostUpdateEnd(uvec, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr); 
+		std::abort();
 	}
 
 	const double finalwtime = MPI_Wtime();

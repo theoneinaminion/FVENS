@@ -1214,16 +1214,16 @@ FlowFV<scalar,secondOrderRequested,constVisc>::assemble_fluxes_face(const Vec uv
 	//  ghost cells
 	const scalar *const ug_pb = uface.getLocalArrayRight()+m->gPhyBFaceStart()*NVARS;
 
-	std::cout<<"calling calc flux"<<std::endl;
+	//std::cout<<"calling calc flux"<<std::endl;
 	calculate_fluxvec_face(uarr, gradarray, uface.getLocalArrayLeft(), uface.getLocalArrayRight(),
 	               ug_pb, farr, faceID);
-	std::cout<<"Fluxes calculated"<<std::endl;
+	// std::cout<<"Fluxes calculated"<<std::endl;
 	
-	for(int k=0;k<4;k++)
-	{
-		std::cout<<"Fluxes at face "<<faceID<<" for variable "<<k<<" is "<<farr[k]<<std::endl;
-	}
-	std::cout<<"fluxes assembled"<<std::endl;
+	// for(int k=0;k<4;k++)
+	// {
+	// 	std::cout<<"Fluxes at face "<<faceID<<" for variable "<<k<<" is "<<farr[k]<<std::endl;
+	// }
+	// std::cout<<"fluxes assembled"<<std::endl;
 
 	delete [] ubcell;
 	return ierr;
@@ -1244,7 +1244,7 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 	 * responsible only for residuals in its own cells while fluxes across connectivity faces are
 	 * computed twice - once by each subdomain.
 	 */
-	Eigen::Map<MVector<scalar>> fluxvec(farr, m->gFaceEnd(), NVARS);
+	//Eigen::Map<MVector<scalar>> fluxvec(farr, NVARS, NVARS);
 
 	// Compute fluxes.
 	/**
@@ -1287,7 +1287,7 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 		/// We assemble the flux vector here
 		for(int ivar = 0; ivar < NVARS; ivar++) {
 #pragma omp atomic write
-			fluxvec(ied,ivar) = fluxes[ivar];
+			farr[ivar] = fluxes[ivar];
 		}
 		
 }
