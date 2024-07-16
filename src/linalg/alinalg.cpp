@@ -575,22 +575,65 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc_mf_lusgs(PC
 	                           globindices.data(), &fluxvec);CHKERRQ(ierr);
 
 	ierr = space->assemble_fluxvec(u, fluxvec);CHKERRQ(ierr);
-	ierr = get_block_LUD(A);CHKERRQ(ierr);
+
+	Vec fluxbyelem;
+	ierr = VecDuplicate(u, &fluxbyelem);CHKERRQ(ierr);
+	Vec elemflux;
+	ierr = VecCreate(PETSC_COMM_WORLD, &elemflux);CHKERRQ(ierr);
+	ierr = VecSetType(elemflux,VECSEQ);CHKERRQ(ierr);
+	ierr = VecSetSizes(elemflux,nvars, nvars);CHKERRQ(ierr);
+	for(fint ied = m->gFaceStart(); ied < m->gFaceEnd(); ied++)
+	{
+		ierr = space->assemble_fluxes_face(u, elemflux,ied);CHKERRQ(ierr);
+		ierr = VecAssemblyBegin(elemflux);CHKERRQ(ierr);
+		ierr = VecAssemblyEnd(elemflux);CHKERRQ(ierr);
+
+		PetscInt idx[nvars],idxe[nvars];
+		std::iota(idx, idx + nvars, ied * nvars);
+		std::iota(idxe, idxe + nvars, 0);
+
+		for(int k=0; k<nvars; k++)
+		{
+			std::cout<<idxe[k]<<std::endl;
+		}
+		PetscScalar elem_flux_arr[nvars];
+
+		ierr = VecGetValues(elemflux, nvars, idxe, elem_flux_arr);std::cout<<"ierr:"<<ierr<<std::endl;CHKERRQ(ierr);
+		std::cout<<"here"<<std::endl;
+		ierr = VecSetValues(fluxbyelem, nvars, idx, elem_flux_arr, INSERT_VALUES);CHKERRQ(ierr);
+
+	}
+	ierr = VecAssemblyBegin(fluxbyelem);CHKERRQ(ierr);
+	ierr = VecAssemblyEnd(fluxbyelem);CHKERRQ(ierr);
+
+	PetscScalar nrm;
+	ierr = VecAXPY(fluxvec, -1.0, fluxbyelem);CHKERRQ(ierr);
+	ierr = VecNorm(fluxvec, NORM_2, &nrm);CHKERRQ(ierr);
+	std::cout<<"Norm of flux diff: "<<nrm<<std::endl;
+	std::abort();
+	//ierr = get_block_LUD(A);CHKERRQ(ierr);
 	return ierr;
 }
 
+#if 0
 template <int nvars,typename scalar>
-PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec y)
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::t_mf_LUSGS(PC pc, Vec x, Vec y)
 {
 	//Testing: L*vec = flux(u+epsilon*vec) - flux(uvec) when the diff is taken only at left elements
 
 	PetscErrorCode ierr = 0;
 
-	Vec v;
-	ierr = VecDuplicate(u, &v);CHKERRQ(ierr);
-	ierr = VecSet(v, 0.0);CHKERRQ(ierr);
-	ierr = VecSetValue(v, 1, 1.0, INSERT_VALUES);CHKERRQ(ierr);
-	writePetscObj(v, "v");
+	// Vec v;
+	// ierr = VecDuplicate(u, &v);CHKERRQ(ierr);
+	// ierr = VecSet(v, 0.0);CHKERRQ(ierr);
+	// //ierr = VecSetValue(v, 1, 1.0, INSERT_VALUES);CHKERRQ(ierr);
+	// ierr = VecSet(v, 0.01);CHKERRQ(ierr);
+	// ierr = VecAssemblyBegin(v);CHKERRQ(ierr);
+	// ierr = VecAssemblyEnd(v);CHKERRQ(ierr);
+	
+	// ierr = VecAssemblyBegin(v);CHKERRQ(ierr);
+	// ierr = VecAssemblyEnd(v);CHKERRQ(ierr);
+	//writePetscObj(v, "v");
 	//ierr = VecShift(v, 0.1);CHKERRQ(ierr); 
 	// PetscRandom rctx;
     // ierr = PetscRandomCreate(PETSC_COMM_WORLD, &rctx);CHKERRQ(ierr);
@@ -601,10 +644,20 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
     // ierr = PetscRandomDestroy(&rctx);CHKERRQ(ierr);
 	// ierr = VecShift(v, 0.1);CHKERRQ(ierr); //ensures non-zero vec
 
-	Mat L;
-	ierr = MatDuplicate(DpL, MAT_COPY_VALUES, &L);CHKERRQ(ierr);
-	ierr = MatAXPY(L, -1.0, D,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr); //L = L-D
-	writePetscObj(L, "L");
+	PetscScalar nrm;
+	ierr = VecNorm(v, NORM_2, &nrm);CHKERRQ(ierr);
+	PetscScalar epsilon = 1e-6;
+	PetscScalar pertmag = epsilon/nrm; 
+	pertmag = 1.0;
+	//std::cout<<"Pertmag: "<<pertmag<<std::endl;
+	// Mat L;
+	// ierr = MatDuplicate(DpL, MAT_COPY_VALUES, &L);CHKERRQ(ierr);
+	// ierr = MatAXPY(L, -1.0, D,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr); //L = L-D
+	// writePetscObj(L, "L");
+
+	// Vec aprod;
+	// ierr = VecDuplicate(u, &aprod);CHKERRQ(ierr);
+	// ierr = MatMult(L, v,aprod);CHKERRQ(ierr); //aprod = L*v
 
 	MPI_Comm mycomm;
 	ierr = PetscObjectGetComm((PetscObject)u, &mycomm); CHKERRQ(ierr);
@@ -616,8 +669,8 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 	ierr = VecDuplicate(u, &upert);CHKERRQ(ierr);
 
 	ierr = VecDuplicate(u, &prod);CHKERRQ(ierr); //Test
-	ierr = VecWAXPY(upert, 1.0, v, u);CHKERRQ(ierr); //z = u + x//Test
-	
+	ierr = VecWAXPY(upert, pertmag, v, u);CHKERRQ(ierr); //z = u + x//Test
+
 
 	const UMesh<freal,NDIM> *const m = space->mesh();
 	Vec pertflux; //perturbed flux vector at a given face.
@@ -637,7 +690,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 
 		PetscInt idx[nvars];
 		std::iota(idx, idx + nvars, element * nvars);
-
+		
 		for(int jface=0; jface<nface ; jface++)
 		{
 			int nbr_elem = m->gesuel(element,jface); //Neighbour element
@@ -649,17 +702,18 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 			{
 				// We are at L part
 				//TODO: Take diff pertflux and fluxvec here and put it inside prod. The check is Lv = prod or not.
-				//const fint faceID = gelemface(element,jface); //Needed for later.
+				const fint faceID = m->gelemface(element,jface); 
 
 				for(int k = 0; k<nvars; k++)
 				{
 					PetscScalar pertfluxval, fluxvecval;
-					int id = nbr_elem*nvars+k;
+					int id = faceID*nvars+k;
 					ierr = VecGetValues(pertflux, 1, &id, &pertfluxval);CHKERRQ(ierr);
 					ierr = VecGetValues(fluxvec, 1, &id, &fluxvecval);CHKERRQ(ierr);
 					
-					sum[k] += pertfluxval - fluxvecval;
+					sum[k] += -(pertfluxval - fluxvecval)/pertmag;
 				}
+				
 			}
 		}
 
@@ -671,15 +725,119 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 
 
 
-	Vec aprod;
-	ierr = VecDuplicate(u, &aprod);CHKERRQ(ierr);
-	ierr = MatMult(L, v,aprod);CHKERRQ(ierr); //aprod = L*v
+	
 
 	writePetscObj(aprod, "aprod");
-	writePetscObj(prod, "prod");
+	writePetscObj(prod, "calprod");
 	std::abort();
 	return ierr;
 
+}
+#endif
+
+
+template <int nvars,typename scalar>
+PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec y)
+{
+	using Eigen::Matrix; using Eigen::RowMajor;
+
+	PetscErrorCode ierr = 0;
+	MPI_Comm mycomm;
+	ierr = PetscObjectGetComm((PetscObject)u, &mycomm); CHKERRQ(ierr);
+	const int mpisize = get_mpi_size(mycomm);
+	const bool isdistributed = (mpisize > 1);
+
+	const UMesh<freal,NDIM> *const m = space->mesh();
+
+	Vec z,upert;
+	ierr = VecDuplicate(u, &z);CHKERRQ(ierr);
+	ierr = VecDuplicate(u, &upert);CHKERRQ(ierr);
+	ierr = VecCopy(u, upert);CHKERRQ(ierr);
+	ierr = VecSet(z,0.0);CHKERRQ(ierr);
+	
+	Vec pertflux;
+	ierr = VecCreate(PETSC_COMM_WORLD, &pertflux);CHKERRQ(ierr);
+	ierr = VecSetType(pertflux,VECSEQ);CHKERRQ(ierr);
+	ierr = VecSetSizes(pertflux,nvars, PETSC_DETERMINE);CHKERRQ(ierr);
+	
+	
+	//Forward Sweep
+	for(fint i = 0; i < m->gnelem(); i++)
+	{
+		const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
+		int nface = m->gnfael(i); //Number of faces of the element
+
+		//PetscScalar sum[nvars];
+		Eigen::VectorXd sum;
+		sum.setZero(nvars);
+		//ierr = PetscArrayzero(sum,nvars);CHKERRQ(ierr);
+
+		PetscInt idx[nvars];
+		std::iota(idx, idx + nvars, element * nvars);
+		
+		for(int jface=0; jface<nface ; jface++)
+		{
+			int nbr_elem = m->gesuel(element,jface); //Neighbour element
+
+			if (nbr_elem >=m->gnelem()) 
+				continue;
+			
+			// This is the \sum_{j:j<i} (f(u+z)-f(z)) part
+			if(nbr_elem < element) // if mat = 4x4, and i = 3 here, lower triangle elements are all <3. That is the logic.
+			{
+				// We are at L part
+				//TODO: Take diff pertflux and fluxvec here and put it inside prod. The check is Lv = prod or not.
+				const fint faceID = m->gelemface(element,jface); 
+				
+				//Get Fluxes
+				ierr = VecSet(pertflux, 0.0);CHKERRQ(ierr);
+				ierr = space->assemble_fluxes_face(upert,pertflux,faceID);CHKERRQ(ierr);
+				ierr = VecAssemblyBegin(pertflux);CHKERRQ(ierr);
+				ierr = VecAssemblyEnd(pertflux);CHKERRQ(ierr);
+
+				for(int k = 0; k<nvars; k++)
+				{
+					PetscScalar pertfluxval, fluxvecval;
+					int id = faceID*nvars+k;
+					ierr = VecGetValues(pertflux, 1, &k, &pertfluxval);CHKERRQ(ierr);
+					ierr = VecGetValues(fluxvec, 1, &id, &fluxvecval);CHKERRQ(ierr);
+					
+					sum[k] += -(pertfluxval - fluxvecval);
+				}
+				
+			}
+		}
+
+		//Perform x_i - sum_{j:j<i} (f(u+z)-f(z))
+		//PetscScalar xval[nvars];
+		Eigen::VectorXd xval(nvars);
+		ierr = VecGetValues(x, nvars, idx, xval.data());CHKERRQ(ierr);
+		xval = xval - sum;
+		// for(int k = 0; k<nvars; k++)
+		// {
+		// 	xval[k] -= sum[k];
+		// }
+
+		//Perform D^{-1}(x_i - sum_{j:j<i} (f(u+z)-f(z))
+		Matrix<freal,nvars,nvars,RowMajor> Dinv_elem;
+		ierr = MatGetValues(Dinv,nvars,idx,nvars,idx,Dinv_elem.data());CHKERRQ(ierr);
+
+		//PetscScalar zval[nvars];
+		Eigen::VectorXd zval(nvars);
+		zval = Dinv_elem*xval; //zval = D_i^{-1}(x_i - sum_{j:j<i} (f(u+z)-f(z))
+
+		ierr = VecSetValues(z, nvars, idx, zval.data(), INSERT_VALUES);CHKERRQ(ierr);
+		ierr = VecSetValues(upert, nvars, idx, zval.data(), ADD_VALUES);CHKERRQ(ierr); //Update upert = u+z;
+
+	}
+	ierr = VecAssemblyBegin(z);CHKERRQ(ierr);
+	ierr = VecAssemblyEnd(z);CHKERRQ(ierr);
+	ierr = VecAssemblyBegin(upert);CHKERRQ(ierr);
+	ierr = VecAssemblyEnd(upert);CHKERRQ(ierr);
+
+	writePetscObj(z, "zmf");
+	std::abort();
+	return ierr;
 }
 
 
@@ -811,11 +969,12 @@ PetscErrorCode writePetscObj(Vec &v, std::string name)
 {
 
 	PetscViewer viewer;
-	const std::string namefin = name + ".dat";
+	const std::string namefin = name + ".m";
 	//PetscCall(VecView(v, PETSC_VIEWER_STDOUT_WORLD));
 
 	PetscCall(PetscPrintf(PETSC_COMM_WORLD, "writing vector ...\n"));
 	PetscCall(PetscViewerASCIIOpen(PETSC_COMM_WORLD, namefin.c_str(), &viewer));
+	PetscCall(PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB));
 	PetscCall(VecView(v, viewer));
 	PetscCall(PetscViewerDestroy(&viewer));
 	return 0;

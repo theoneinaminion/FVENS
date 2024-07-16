@@ -161,6 +161,16 @@ class MatrixFreePreconditiner
 	PetscErrorCode mf_LUSGS(PC pc, Vec x, Vec y);
 
 	/**
+	 * @brief Dummy Shell preconditioner apply function using matrix-free version of LU-SGS for testing
+	 * 
+	 * @param pc preconditioning context
+	 * @param x  unpreconditioned vector
+	 * @param y  preconditioned vector
+	 * @return PetscErrorCode 
+	 */
+	PetscErrorCode t_mf_LUSGS(PC pc, Vec x, Vec y);
+
+	/**
 	 * @brief Get the block L, U, D parts of the Jacobian where A = L+D+U
 	 * @param Mat the jacobina matrix
 	 */

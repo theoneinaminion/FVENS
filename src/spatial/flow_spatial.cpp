@@ -1214,10 +1214,16 @@ FlowFV<scalar,secondOrderRequested,constVisc>::assemble_fluxes_face(const Vec uv
 	//  ghost cells
 	const scalar *const ug_pb = uface.getLocalArrayRight()+m->gPhyBFaceStart()*NVARS;
 
+	std::cout<<"calling calc flux"<<std::endl;
 	calculate_fluxvec_face(uarr, gradarray, uface.getLocalArrayLeft(), uface.getLocalArrayRight(),
 	               ug_pb, farr, faceID);
-
+	std::cout<<"Fluxes calculated"<<std::endl;
 	
+	for(int k=0;k<4;k++)
+	{
+		std::cout<<"Fluxes at face "<<faceID<<" for variable "<<k<<" is "<<farr[k]<<std::endl;
+	}
+	std::cout<<"fluxes assembled"<<std::endl;
 
 	delete [] ubcell;
 	return ierr;
@@ -1284,7 +1290,6 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 			fluxvec(ied,ivar) = fluxes[ivar];
 		}
 		
-	
 }
 
 
