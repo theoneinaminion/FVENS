@@ -551,7 +551,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec 
 	ierr = KSPDestroy(&forward);CHKERRQ(ierr);
 	ierr = KSPDestroy(&backward);CHKERRQ(ierr);
 	writePetscObj(y, "ym");
-	std::abort();
+	//std::abort();
 	return ierr;
 }
 
@@ -578,6 +578,8 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc_mf_lusgs(PC
 	                           globindices.data(), &fluxvec);CHKERRQ(ierr);
 
 	ierr = space->assemble_fluxvec(u, fluxvec);CHKERRQ(ierr);
+	ierr = VecGhostUpdateBegin(fluxvec, INSERT_VALUES, SCATTER_FORWARD);CHKERRQ(ierr);
+	ierr = VecGhostUpdateEnd(fluxvec, INSERT_VALUES, SCATTER_FORWARD);CHKERRQ(ierr);
 	//ierr = get_block_LUD(A);CHKERRQ(ierr);
 	return ierr;
 }
@@ -709,6 +711,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 	using Eigen::Matrix; using Eigen::RowMajor;
 
 	PetscErrorCode ierr = 0;
+
 	MPI_Comm mycomm;
 	ierr = PetscObjectGetComm((PetscObject)u, &mycomm); CHKERRQ(ierr);
 	const int mpisize = get_mpi_size(mycomm);
@@ -862,9 +865,9 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 	ierr = VecAssemblyEnd(upert);CHKERRQ(ierr);
 
 
-	writePetscObj(y, "ymf1nl");
+	//writePetscObj(y, "ymf1nl");
 	//std::abort();
-	std::cout<<"Done MF LUSGS\n";
+	//std::cout<<"Done MF LUSGS\n";
 	return ierr;
 }	
 

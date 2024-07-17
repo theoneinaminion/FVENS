@@ -916,9 +916,11 @@ FlowFV<scalar,secondOrderRequested,constVisc>::assemble_fluxvec(const Vec uvec, 
 	scalar *ubcell = nullptr;
 	if(m->gnbface() > 0)
 		ubcell = new scalar[m->gnbface()*NVARS];
-				
+
+	#if 0			
 	if(secondOrderRequested) //Always set to false
 	{
+		std::cout<<"I AM HERE"<<std::endl;
 		amat::Array2dMutableView<scalar> uleft(uface.getLocalArrayLeft(), m->gnaface(),NVARS);
 		amat::Array2dMutableView<scalar> uright(uface.getLocalArrayRight(), m->gnaface(),NVARS);
 
@@ -1016,8 +1018,10 @@ FlowFV<scalar,secondOrderRequested,constVisc>::assemble_fluxvec(const Vec uvec, 
 			}
 		}
 	}
+
+	#endif
 	
-	else
+	//else
 	{
 		// if order is 1, set the face data same as cell-centred data for all faces
 		//std::cout<<"not Second Order Reconstruction lode"<<std::endl;
