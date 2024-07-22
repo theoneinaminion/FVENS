@@ -353,6 +353,17 @@ TimingData SteadyFlowCase::execute_main(const Spatial<freal,NVARS> *const prob, 
 	}
 #endif
 
+	PCType user_pc;
+	PC pc1;
+	ierr = KSPGetPC(isol.ksp, &pc1);
+	ierr = PCGetType(pc1,&user_pc); 
+	
+	if(strcmp(user_pc,"shell")==0)
+	{
+		ierr = create_shell_precond<NVARS,freal>(prob, &pc1); 
+		fvens_throw(ierr, "Setup user-defined preconditioning");
+	}
+
 	// setup nonlinear ODE solver for main solve - MUST be done AFTER KSPCreate
 	if(opts.pseudotimetype == "IMPLICIT")
 	{

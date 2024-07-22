@@ -880,6 +880,7 @@ template<typename scalar, bool secondOrderRequested, bool constVisc>
 StatusCode
 FlowFV<scalar,secondOrderRequested,constVisc>::assemble_fluxvec(const Vec uvec, Vec fluxvec) const
 {
+	// Jacobian is always First order so remove all 2nd order stuff	
 	
 	StatusCode ierr = 0;
 	//const int mpirank = get_mpi_rank(PETSC_COMM_WORLD);
@@ -1044,8 +1045,7 @@ FlowFV<scalar,secondOrderRequested,constVisc>::assemble_fluxvec(const Vec uvec, 
 	// get right (ghost) state at boundary faces for computing fluxes
 	compute_boundary_states(uface.getLocalArrayLeft()+m->gPhyBFaceStart()*NVARS,
 	                        uface.getLocalArrayRight()+m->gPhyBFaceStart()*NVARS);
-
-	
+	#if 0
 	if(secondOrderRequested)
 	{
 		uface.updateSharedFacesEnd();
@@ -1055,18 +1055,22 @@ FlowFV<scalar,secondOrderRequested,constVisc>::assemble_fluxvec(const Vec uvec, 
 			ierr = VecGhostUpdateEnd(gradvec, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
 		}
 	}
-
+	#endif
+	#if 0
 	ConstGhostedVecHandler<scalar> gradh;
 	if(secondOrderRequested)
 		gradh.setVec(gradvec);
 	const scalar *const gradarray = secondOrderRequested ? gradh.getArray() : nullptr;
-
+	#endif 
+	const scalar *const gradarray = nullptr;
 	MutableVecHandler<scalar> fvh(fluxvec);
 	scalar *const farr = fvh.getArray();
 	// Depending on whether we want a 2nd order solution, we use the correct array for phy. boun.
 	//  ghost cells
-	const scalar *const ug_pb = secondOrderRequested ?
-		ubcell : uface.getLocalArrayRight()+m->gPhyBFaceStart()*NVARS;
+	// const scalar *const ug_pb = secondOrderRequested ?
+	// 	ubcell : uface.getLocalArrayRight()+m->gPhyBFaceStart()*NVARS;
+
+	const scalar *const ug_pb = uface.getLocalArrayRight()+m->gPhyBFaceStart()*NVARS;	
 
 	compute_fluxvec(uarr, gradarray, uface.getLocalArrayLeft(), uface.getLocalArrayRight(),
 	               ug_pb, farr);

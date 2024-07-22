@@ -523,11 +523,12 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec 
 	ierr = KSPSetType(forward, KSPRICHARDSON);CHKERRQ(ierr);
 	ierr = KSPGetPC(forward, &forward_pc);CHKERRQ(ierr);
 	ierr = PCSetType(forward_pc, PCILU);CHKERRQ(ierr);
+	PCType pctype;
+	ierr = PCGetType(forward_pc, &pctype);CHKERRQ(ierr);
 	ierr = KSPSetTolerances(forward, 0.5, PETSC_DEFAULT, PETSC_DEFAULT, 5); CHKERRQ(ierr);
 	ierr = KSPSetOperators(forward, DpL, DpL);CHKERRQ(ierr);
 	ierr = KSPSolve(forward, x, z);CHKERRQ(ierr); // z = (D+L)^{-1}x
 
-	
 	//Backward sweep
 	KSP backward;
 	PC backward_pc;
@@ -550,7 +551,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::m_LUSGS(PC pc, Vec x, Vec 
 	ierr = VecDestroy(&temp);CHKERRQ(ierr);
 	ierr = KSPDestroy(&forward);CHKERRQ(ierr);
 	ierr = KSPDestroy(&backward);CHKERRQ(ierr);
-	writePetscObj(y, "ym");
+	//writePetscObj(y, "ym");
 	//std::abort();
 	return ierr;
 }
@@ -584,7 +585,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::setup_shell_pc_mf_lusgs(PC
 	return ierr;
 }
 
-#if 0
+#if 1
 template <int nvars,typename scalar>
 PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::t_mf_LUSGS(PC pc, Vec x, Vec y)
 {
@@ -592,41 +593,43 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::t_mf_LUSGS(PC pc, Vec x, V
 
 	PetscErrorCode ierr = 0;
 
-	// Vec v;
-	// ierr = VecDuplicate(u, &v);CHKERRQ(ierr);
-	// ierr = VecSet(v, 0.0);CHKERRQ(ierr);
-	// //ierr = VecSetValue(v, 1, 1.0, INSERT_VALUES);CHKERRQ(ierr);
-	// ierr = VecSet(v, 0.01);CHKERRQ(ierr);
-	// ierr = VecAssemblyBegin(v);CHKERRQ(ierr);
-	// ierr = VecAssemblyEnd(v);CHKERRQ(ierr);
+	Vec v;
+	ierr = VecDuplicate(u, &v);CHKERRQ(ierr);
+	ierr = VecSet(v, 0.0);CHKERRQ(ierr);
+	//ierr = VecSetValue(v, 10, 0.01, INSERT_VALUES);CHKERRQ(ierr);
+	ierr = VecSet(v, 0.01);CHKERRQ(ierr);
+	ierr = VecAssemblyBegin(v);CHKERRQ(ierr);
+	ierr = VecAssemblyEnd(v);CHKERRQ(ierr);
 	
 	// ierr = VecAssemblyBegin(v);CHKERRQ(ierr);
 	// ierr = VecAssemblyEnd(v);CHKERRQ(ierr);
 	//writePetscObj(v, "v");
 	//ierr = VecShift(v, 0.1);CHKERRQ(ierr); 
-	// PetscRandom rctx;
-    // ierr = PetscRandomCreate(PETSC_COMM_WORLD, &rctx);CHKERRQ(ierr);
-	// unsigned long seed = 69;
-	// ierr = PetscRandomSetSeed(rctx, seed);CHKERRQ(ierr);
-    // ierr = PetscRandomSetFromOptions(rctx);CHKERRQ(ierr);
-    // ierr = VecSetRandom(v, rctx);CHKERRQ(ierr);
-    // ierr = PetscRandomDestroy(&rctx);CHKERRQ(ierr);
-	// ierr = VecShift(v, 0.1);CHKERRQ(ierr); //ensures non-zero vec
+	PetscRandom rctx;
+    ierr = PetscRandomCreate(PETSC_COMM_WORLD, &rctx);CHKERRQ(ierr);
+	unsigned long seed = 69;
+	ierr = PetscRandomSetSeed(rctx, seed);CHKERRQ(ierr);
+    ierr = PetscRandomSetFromOptions(rctx);CHKERRQ(ierr);
+    ierr = VecSetRandom(v, rctx);CHKERRQ(ierr);
+    ierr = PetscRandomDestroy(&rctx);CHKERRQ(ierr);
+	ierr = VecShift(v, 0.1);CHKERRQ(ierr); //ensures non-zero vec
+	ierr = VecScale(v, 0.01);CHKERRQ(ierr);
+	//writePetscObj(v, "v");
 
 	PetscScalar nrm;
 	ierr = VecNorm(v, NORM_2, &nrm);CHKERRQ(ierr);
-	PetscScalar epsilon = 1e-6;
+	PetscScalar epsilon = 1e-3;
 	PetscScalar pertmag = epsilon/nrm; 
 	pertmag = 1.0;
 	//std::cout<<"Pertmag: "<<pertmag<<std::endl;
-	// Mat L;
-	// ierr = MatDuplicate(DpL, MAT_COPY_VALUES, &L);CHKERRQ(ierr);
-	// ierr = MatAXPY(L, -1.0, D,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr); //L = L-D
-	// writePetscObj(L, "L");
+	Mat L;
+	ierr = MatDuplicate(DpL, MAT_COPY_VALUES, &L);CHKERRQ(ierr);
+	ierr = MatAXPY(L, -1.0, D,DIFFERENT_NONZERO_PATTERN);CHKERRQ(ierr); //L = L-D
+	//writePetscObj(L, "L");
 
-	// Vec aprod;
-	// ierr = VecDuplicate(u, &aprod);CHKERRQ(ierr);
-	// ierr = MatMult(L, v,aprod);CHKERRQ(ierr); //aprod = L*v
+	Vec aprod;
+	ierr = VecDuplicate(u, &aprod);CHKERRQ(ierr);
+	ierr = MatMult(L, v,aprod);CHKERRQ(ierr); //aprod = L*v
 
 	MPI_Comm mycomm;
 	ierr = PetscObjectGetComm((PetscObject)u, &mycomm); CHKERRQ(ierr);
@@ -639,7 +642,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::t_mf_LUSGS(PC pc, Vec x, V
 
 	ierr = VecDuplicate(u, &prod);CHKERRQ(ierr); //Test
 	ierr = VecWAXPY(upert, pertmag, v, u);CHKERRQ(ierr); //z = u + x//Test
-
+	std::cout<<"Pertmag: "<<pertmag<<std::endl;
 
 	const UMesh<freal,NDIM> *const m = space->mesh();
 	Vec pertflux; //perturbed flux vector at a given face.
@@ -698,7 +701,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::t_mf_LUSGS(PC pc, Vec x, V
 
 	writePetscObj(aprod, "aprod");
 	writePetscObj(prod, "calprod");
-	std::abort();
+	//std::abort();
 	return ierr;
 
 }
@@ -708,10 +711,11 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::t_mf_LUSGS(PC pc, Vec x, V
 template <int nvars,typename scalar>
 PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec y)
 {
+	//std::cout<<"In MF LUSGS"<<std::endl;
 	using Eigen::Matrix; using Eigen::RowMajor;
 
 	PetscErrorCode ierr = 0;
-
+	//ierr = m_LUSGS(pc, x, y);CHKERRQ(ierr);
 	MPI_Comm mycomm;
 	ierr = PetscObjectGetComm((PetscObject)u, &mycomm); CHKERRQ(ierr);
 	const int mpisize = get_mpi_size(mycomm);
@@ -732,6 +736,8 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 	
 	
 	//Forward Sweep
+	PetscScalar znrm;
+	ierr = VecNorm(x, NORM_2, &znrm);CHKERRQ(ierr);
 	for(fint i = 0; i < m->gnelem(); i++)
 	{
 		const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
@@ -746,6 +752,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 		PetscInt idx[nvars];
 		std::iota(idx, idx + nvars, element * nvars);
 		
+		//PetscBool islower = PETSC_FALSE;
 		for(int jface=0; jface<nface ; jface++)
 		{
 			int nbr_elem = m->gesuel(element,jface); //Neighbour element
@@ -757,6 +764,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 			if(nbr_elem < element) // if mat = 4x4, and i = 3 here, lower triangle elements are all <3. That is the logic.
 			{
 				// We are at L part
+				//islower = PETSC_TRUE;
 				const fint faceID = m->gelemface(element,jface); 
 				
 				//Get Fluxes
@@ -772,7 +780,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 					ierr = VecGetValues(pertflux, 1, &k, &pertfluxval);CHKERRQ(ierr);
 					ierr = VecGetValues(fluxvec, 1, &id, &fluxvecval);CHKERRQ(ierr);
 					
-					sum[k] += -(pertfluxval - fluxvecval);
+					sum[k] += -(pertfluxval - fluxvecval); //!Should it be negative here and positive at U based on flux calc coz it seems to give better results like this? 
 				}
 				
 			}
@@ -841,7 +849,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 					ierr = VecGetValues(pertflux, 1, &k, &pertfluxval);CHKERRQ(ierr);
 					ierr = VecGetValues(fluxvec, 1, &id, &fluxvecval);CHKERRQ(ierr);
 					
-					sum[k] += -(pertfluxval - fluxvecval);
+					sum[k] += (pertfluxval - fluxvecval);
 				}
 
 			}
@@ -865,7 +873,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 	ierr = VecAssemblyEnd(upert);CHKERRQ(ierr);
 
 
-	//writePetscObj(y, "ymf1nl");
+	//writePetscObj(y, "ymf");
 	//std::abort();
 	//std::cout<<"Done MF LUSGS\n";
 	return ierr;
