@@ -1274,6 +1274,26 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 		for(int ivar = 0; ivar < NVARS; ivar++)
 			fluxes[ivar] *= len;
 
+		#if 0
+		// /if((ied==521)||(ied==493)||(ied==521)||(ied==538))	
+		{
+			for(int k=0;k<NVARS;k++)
+			{
+				std::cout<<"Fluxes at face "<<ied<<" for variable "<<k<<" is "<<fluxes[k]<<std::endl;
+			}
+
+			for(int k=0;k<NVARS;k++)
+			{
+				std::cout<<"uleft: "<<uleft[ied*NVARS +k]<<std::endl;
+			}
+
+			for(int k=0;k<NVARS;k++)
+			{
+				std::cout<<"uright: "<<uright[ied*NVARS +k]<<std::endl;
+			}
+		}
+		#endif
+
 		if(pconfig.viscous_sim)
 		{
 			const fint ibpface = ied - m->gPhyBFaceStart();
@@ -1299,6 +1319,8 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 		}
 		
 }
+
+
 
 
 template class FlowFV_base<freal>;
