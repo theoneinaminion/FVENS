@@ -393,6 +393,29 @@ protected:
 	                                               const freal *const ul, const freal *const ur,
 	                                               freal *const __restrict vfluxi,
 	                                               freal *const __restrict vfluxj) const;
+
+	/**
+	 * @brief This is a function you might not later. You need where you use Matrix Jacobian with MF Preconditioner. 
+	 * This function supresses the need for 2nd order requested.
+	 * 
+	 * @param normal 
+	 * @param ccleft 
+	 * @param ccright 
+	 * @param ucell_l 
+	 * @param ucell_r 
+	 * @param gradsLeft 
+	 * @param gradsRight 
+	 * @param ul 
+	 * @param ur 
+	 * @param vflux 
+	 */
+	void forlusgs_compute_viscous_flux(const scalar *const normal,
+	                          const scalar *const ccleft, const scalar *const ccright,
+	                          const scalar *const ucell_l, const scalar *const ucell_r,
+	                          const GradBlock_t<scalar,NDIM,NVARS>& gradsLeft,
+	                          const GradBlock_t<scalar,NDIM,NVARS>& gradsRight,
+	                          const scalar *const ul, const scalar *const ur,
+	                          scalar *const vflux) const;
 };
 
 }

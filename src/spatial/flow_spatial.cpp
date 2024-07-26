@@ -1126,10 +1126,11 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 			const scalar *const rcr = isPhyBoun ? &rcbp(ibpface,0) : &rc(relem,0);
 			const scalar *const ucellright
 				= isPhyBoun ? &ug[ibpface*NVARS] : &u[relem*NVARS];
+
 			const GradBlock_t<scalar,NDIM,NVARS>& gradright = isPhyBoun ? grads[lelem] : grads[relem];
 
 			scalar vflux[NVARS];
-			compute_viscous_flux(&n[0], &rc(lelem,0), rcr,
+			forlusgs_compute_viscous_flux(&n[0], &rc(lelem,0), rcr,
 			                     &u[lelem*NVARS], ucellright, grads[lelem], gradright,
 			                     &uleft[ied*NVARS], &uright[ied*NVARS], vflux);
 
@@ -1304,7 +1305,8 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 			const GradBlock_t<scalar,NDIM,NVARS>& gradright = isPhyBoun ? grads[lelem] : grads[relem];
 
 			scalar vflux[NVARS];
-			compute_viscous_flux(&n[0], &rc(lelem,0), rcr,
+			//!Bro change the viscous flux function to ensure it does not need 2nd order. Maybe that is what causing the segfault?
+			forlusgs_compute_viscous_flux(&n[0], &rc(lelem,0), rcr,
 								&u[lelem*NVARS], ucellright, grads[lelem], gradright,
 								&uleft[ied*NVARS], &uright[ied*NVARS], vflux);
 
@@ -1320,6 +1322,56 @@ void FlowFV<scalar,secondOrderRequested,constVisc>
 		
 }
 
+template<typename scalar, bool secondOrderRequested, bool constVisc>
+void FlowFV<scalar,secondOrderRequested,constVisc>
+::forlusgs_compute_viscous_flux(const scalar *const normal,
+                       const scalar *const rcl, const scalar *const rcr,
+                       const scalar *const ucell_l, const scalar *const ucell_r,
+                       const GradBlock_t<scalar,NDIM,NVARS>& gradsl,
+                       const GradBlock_t<scalar,NDIM,NVARS>& gradsr,
+                       const scalar *const ul, const scalar *const ur,
+                       scalar *const __restrict vflux) const
+{
+	// cell-centred left and right states
+	scalar uctl[NVARS], uctr[NVARS];
+	// left and right gradients; zero for first order scheme
+	scalar gradl[NDIM*NVARS], gradr[NDIM*NVARS];
+
+	// const scalar *in_gradl = nullptr, *in_gradr = nullptr;
+
+	#if 0
+	if(secondOrderRequested) {
+		// in_gradl = &grads[lelem](0,0);
+		// in_gradr = &grads[relem](0,0);
+		for(int i = 0; i < NDIM; i++)
+			for(int j = 0; j < NVARS; j++) {
+				gradl[i*NVARS+j] = gradsl(i,j);
+				gradr[i*NVARS+j] = gradsr(i,j);
+			}
+	}
+	#endif
+
+	// getPrimitive2StatesAndGradients<scalar,NDIM,secondOrderRequested>(physics, ucell_l, in_ucr,
+	//                                                                   in_gradl, in_gradr,
+	//                                                                   uctl, uctr, gradl, gradr);
+
+	getPrimitive2StatesAndGradients<scalar,NDIM,secondOrderRequested>(physics, ucell_l, ucell_r,
+	                                                                  gradl, gradr,
+	                                                                  uctl, uctr, gradl, gradr);
+
+	//if(!secondOrderRequested) {
+		for(int i = 0; i < NDIM; i++)
+			for(int j = 0; j < NVARS; j++) {
+				gradl[i*NVARS+j] = 0;
+				gradr[i*NVARS+j] = 0;
+			}
+	//}
+
+	scalar grad[NDIM][NVARS];
+	getFaceGradient_modifiedAverage(rcl, rcr, uctl, uctr, gradl, gradr, grad);
+
+	computeViscousFlux<scalar,NDIM,NVARS,constVisc>(physics, normal, grad, ul, ur, vflux);
+}
 
 
 

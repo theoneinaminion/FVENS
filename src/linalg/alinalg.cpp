@@ -718,6 +718,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::t_mf_LUSGS(PC pc, Vec x, V
 template <int nvars,typename scalar>
 PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec y)
 {
+	//Todo:Just do the epsilon thing here and check man. ffs.
 	//!Details from Debugging:------------
 	//> Don't look at flux anymore. The flux vectors are correctly assembled. They were tested by calculating the residual at u using FVENS original method and using assemble_flux_vec method. Both gave same results for a non-zero u.
 	
