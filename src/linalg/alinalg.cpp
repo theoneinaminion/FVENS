@@ -746,10 +746,10 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 	ierr = VecSetType(pertflux,VECSEQ);CHKERRQ(ierr);
 	ierr = VecSetSizes(pertflux,nvars, nvars);CHKERRQ(ierr);
 	
-	
 	//Forward Sweep
-	PetscScalar znrm;
-	ierr = VecNorm(x, NORM_2, &znrm);CHKERRQ(ierr);
+	PetscScalar tol = 1e-6;
+	PetscScalar pertmag = tol;
+
 	for(fint i = 0; i < m->gnelem(); i++)
 	{
 		const fint element = isdistributed ? m->gglobalElemIndex(i) : i; //Global index number of element in case of parallel run
@@ -766,6 +766,9 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 		// std::cout<<"-------------------------------"<<std::endl;
 		// std::cout<<i<<std::endl;
 		//PetscBool islower = PETSC_FALSE;
+		//ierr = VecNorm(z, NORM_2, &znrm);CHKERRQ(ierr);
+		
+		//pertmag = (znrm < tol)? tol : tol/znrm;
 		for(int jface=0; jface<nface ; jface++)
 		{
 			int nbr_elem = m->gesuel(element,jface); //Neighbour element
@@ -803,8 +806,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 						std::abort();
 					}
 					ierr = VecGetValues(fluxvec, 1, &id, &fluxvecval);CHKERRQ(ierr);
-					
-					sum[k] += -(pertfluxval - fluxvecval); //!Should it be negative here and positive at U based on flux calc coz it seems to give better results like this? 
+					sum[k] += -(pertfluxval - fluxvecval)/pertmag; //!Should it be negative here and positive at U based on flux calc coz it seems to give better results like this? 
 				}
 				
 			}
@@ -826,6 +828,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 		//std::cout<<zval<<std::endl;
 
 		ierr = VecSetValues(z, nvars, idx, zval.data(), INSERT_VALUES);CHKERRQ(ierr);
+		zval = zval*pertmag;
 		ierr = VecSetValues(upert, nvars, idx, zval.data(), ADD_VALUES);CHKERRQ(ierr); //Update upert = u+z;
 
 		
@@ -855,7 +858,9 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 
 		PetscInt idx[nvars];
 		std::iota(idx, idx + nvars, element * nvars);
-		
+		// PetscScalar ynrm;
+		// ierr = VecNorm(y, NORM_2, &ynrm);CHKERRQ(ierr);
+		// pertmag = (ynrm < tol)? tol : tol/ynrm;
 		for(int jface=0; jface<nface ; jface++)
 		{
 			int nbr_elem = m->gesuel(element,jface); //Neighbour element
@@ -881,8 +886,8 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 					int id = faceID*nvars+k;
 					ierr = VecGetValues(pertflux, 1, &k, &pertfluxval);CHKERRQ(ierr);
 					ierr = VecGetValues(fluxvec, 1, &id, &fluxvecval);CHKERRQ(ierr);
-					
-					sum[k] += (pertfluxval - fluxvecval);
+
+					sum[k] += (pertfluxval - fluxvecval)/pertmag;
 				}
 
 			}
@@ -897,6 +902,7 @@ PetscErrorCode MatrixFreePreconditiner<nvars,scalar>::mf_LUSGS(PC pc, Vec x, Vec
 		yval = zval - Dinv_elem*sum; //y = z - D_i^{-1}[sum_{j:j>i} (f(u+z)-f(z))]
 
 		ierr = VecSetValues(y, nvars, idx, yval.data(), INSERT_VALUES);CHKERRQ(ierr);
+		yval = yval*pertmag;
 		ierr = VecSetValues(upert, nvars, idx, yval.data(), ADD_VALUES);CHKERRQ(ierr); //Update upert = u+y;
 
 	}
